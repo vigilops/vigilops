@@ -135,7 +135,7 @@ func (app *application) deleteProjectHandler(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	w.WriteHeader(http.StatusNoContent)
+	app.noContentResponse(w)
 }
 
 func parseUUIDParam(r *http.Request, name string) (uuid.UUID, error) {

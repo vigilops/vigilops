@@ -1,0 +1,242 @@
+package main
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"time"
+
+	"github.com/google/uuid"
+
+	"github.com/keelwave/keelwave/internal/store"
+)
+
+// --- Start run ----------------------------------------------------------
+
+type ingestAgentRunStartPayload struct {
+	Timestamp *time.Time      `json:"timestamp,omitempty"`
+	AgentName string          `json:"agent_name"      validate:"required,min=1,max=200"`
+	Input     *string         `json:"input,omitempty" validate:"omitempty,max=10000"`
+	Metadata  json.RawMessage `json:"metadata,omitempty"`
+}
+
+// IngestAgentRunStart godoc
+//
+//	@Summary		Start an agent run
+//	@Description	Opens a new agent run record with status="running". Returns id + timestamp; the client must pass both back to finish the run.
+//	@Tags			ingest
+//	@Accept			json
+//	@Produce		json
+//	@Param			payload	body		ingestAgentRunStartPayload	true	"Run start payload"
+//	@Success		201		{object}	ingestResponse
+//	@Failure		400		{object}	error
+//	@Failure		401		{object}	error
+//	@Failure		500		{object}	error
+//	@Security		ApiKeyAuth
+//	@Router			/ingest/agent/runs [post]
+func (app *application) ingestAgentRunStartHandler(w http.ResponseWriter, r *http.Request) {
+	projectID := projectIDFromContext(r.Context())
+
+	var payload ingestAgentRunStartPayload
+	if err := readJSON(w, r, &payload); err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+	if err := Validate.Struct(payload); err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	run := &store.AgentRun{
+		ProjectID: projectID,
+		AgentName: payload.AgentName,
+		Status:    "running",
+		Input:     payload.Input,
+		Metadata:  []byte(payload.Metadata),
+	}
+	if payload.Timestamp != nil {
+		run.Timestamp = *payload.Timestamp
+	}
+
+	if err := app.store.AgentRuns.Insert(r.Context(), run); err != nil {
+		app.internalServerError(w, r, err)
+		return
+	}
+
+	if err := app.jsonResponse(w, http.StatusCreated, ingestResponse{ID: &run.ID, Timestamp: run.Timestamp}); err != nil {
+		app.internalServerError(w, r, err)
+	}
+}
+
+// --- Finish run ---------------------------------------------------------
+
+type ingestAgentRunFinishPayload struct {
+	Timestamp         time.Time `json:"timestamp"             validate:"required"`
+	Status            string    `json:"status"                validate:"required,oneof=completed failed"`
+	TerminationReason *string   `json:"termination_reason,omitempty" validate:"omitempty,oneof=clean max_steps_reached context_limit error loop_detected timeout"`
+	LoopDetected      bool      `json:"loop_detected"`
+	LoopStepIndex     *int      `json:"loop_step_index,omitempty" validate:"omitempty,gte=0"`
+	TotalSteps        int       `json:"total_steps"           validate:"gte=0"`
+	TotalTokens       int       `json:"total_tokens"          validate:"gte=0"`
+	TotalCostUSD      *float64  `json:"total_cost_usd,omitempty" validate:"omitempty,gte=0"`
+	DurationMs        *int      `json:"duration_ms,omitempty" validate:"omitempty,gte=0"`
+	Output            *string   `json:"output,omitempty"      validate:"omitempty,max=100000"`
+}
+
+// IngestAgentRunFinish godoc
+//
+//	@Summary		Finish an agent run
+//	@Description	Marks a run terminal and writes totals. timestamp must match the value returned at start (hypertable PK).
+//	@Tags			ingest
+//	@Accept			json
+//	@Produce		json
+//	@Param			runID	path	string						true	"Agent run UUID"
+//	@Param			payload	body	ingestAgentRunFinishPayload	true	"Run finish payload"
+//	@Success		204
+//	@Failure		400	{object}	error
+//	@Failure		401	{object}	error
+//	@Failure		404	{object}	error
+//	@Failure		500	{object}	error
+//	@Security		ApiKeyAuth
+//	@Router			/ingest/agent/runs/{runID}/finish [post]
+func (app *application) ingestAgentRunFinishHandler(w http.ResponseWriter, r *http.Request) {
+	runID, err := parseUUIDParam(r, "runID")
+	if err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	var payload ingestAgentRunFinishPayload
+	if err := readJSON(w, r, &payload); err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+	if err := Validate.Struct(payload); err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	err = app.store.AgentRuns.Finish(r.Context(), runID, payload.Timestamp, store.AgentRunFinish{
+		Status:            payload.Status,
+		TerminationReason: payload.TerminationReason,
+		LoopDetected:      payload.LoopDetected,
+		LoopStepIndex:     payload.LoopStepIndex,
+		TotalSteps:        payload.TotalSteps,
+		TotalTokens:       payload.TotalTokens,
+		TotalCostUSD:      payload.TotalCostUSD,
+		DurationMs:        payload.DurationMs,
+		Output:            payload.Output,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, store.ErrNotFound):
+			app.notFoundResponse(w, r, err)
+		default:
+			app.internalServerError(w, r, err)
+		}
+		return
+	}
+
+	app.noContentResponse(w)
+}
+
+// --- Append step --------------------------------------------------------
+
+type ingestAgentStepPayload struct {
+	Timestamp     *time.Time      `json:"timestamp,omitempty"`
+	AgentRunID    uuid.UUID       `json:"agent_run_id"  validate:"required"`
+	StepIndex     int             `json:"step_index"    validate:"gte=0"`
+	StepType      string          `json:"step_type"     validate:"required,oneof=think tool_call tool_result replan"`
+	Content       *string         `json:"content,omitempty"      validate:"omitempty,max=100000"`
+	ToolName      *string         `json:"tool_name,omitempty"    validate:"omitempty,max=200"`
+	ToolInput     json.RawMessage `json:"tool_input,omitempty"`
+	ToolOutput    json.RawMessage `json:"tool_output,omitempty"`
+	ToolSuccess   *bool           `json:"tool_success,omitempty"`
+	ToolLatencyMs *int            `json:"tool_latency_ms,omitempty" validate:"omitempty,gte=0"`
+	Tokens        *int            `json:"tokens,omitempty"          validate:"omitempty,gte=0"`
+	CostUSD       *float64        `json:"cost_usd,omitempty"        validate:"omitempty,gte=0"`
+	Metadata      json.RawMessage `json:"metadata,omitempty"`
+}
+
+// IngestAgentStep godoc
+//
+//	@Summary		Append an agent step
+//	@Description	Records one step in an agent loop. Server computes a SHA-256 fingerprint of tool_name + tool_input for loop detection and bumps the agent_tools registry when tool_name is present.
+//	@Tags			ingest
+//	@Accept			json
+//	@Produce		json
+//	@Param			payload	body		ingestAgentStepPayload	true	"Step payload"
+//	@Success		201		{object}	ingestResponse
+//	@Failure		400		{object}	error
+//	@Failure		401		{object}	error
+//	@Failure		500		{object}	error
+//	@Security		ApiKeyAuth
+//	@Router			/ingest/agent/steps [post]
+func (app *application) ingestAgentStepHandler(w http.ResponseWriter, r *http.Request) {
+	projectID := projectIDFromContext(r.Context())
+
+	var payload ingestAgentStepPayload
+	if err := readJSON(w, r, &payload); err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+	if err := Validate.Struct(payload); err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	step := &store.AgentStep{
+		ProjectID:        projectID,
+		AgentRunID:       payload.AgentRunID,
+		StepIndex:        payload.StepIndex,
+		StepType:         payload.StepType,
+		Content:          payload.Content,
+		ToolName:         payload.ToolName,
+		ToolInput:        []byte(payload.ToolInput),
+		ToolOutput:       []byte(payload.ToolOutput),
+		ToolSuccess:      payload.ToolSuccess,
+		ToolLatencyMs:    payload.ToolLatencyMs,
+		Tokens:           payload.Tokens,
+		CostUSD:          payload.CostUSD,
+		Metadata:         []byte(payload.Metadata),
+		InputFingerprint: stepFingerprint(payload.ToolName, payload.ToolInput),
+	}
+	if payload.Timestamp != nil {
+		step.Timestamp = *payload.Timestamp
+	}
+
+	if err := app.store.AgentSteps.Insert(r.Context(), step); err != nil {
+		app.internalServerError(w, r, err)
+		return
+	}
+
+	if payload.ToolName != nil {
+		go app.upsertTool(projectID, *payload.ToolName)
+	}
+
+	if err := app.jsonResponse(w, http.StatusCreated, ingestResponse{ID: &step.ID, Timestamp: step.Timestamp}); err != nil {
+		app.internalServerError(w, r, err)
+	}
+}
+
+func stepFingerprint(toolName *string, toolInput json.RawMessage) []byte {
+	if toolName == nil {
+		return nil
+	}
+	h := sha256.New()
+	h.Write([]byte(*toolName))
+	h.Write([]byte{0})
+	h.Write(toolInput)
+	sum := h.Sum(nil)
+	return sum
+}
+
+func (app *application) upsertTool(projectID uuid.UUID, toolName string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := app.store.AgentTools.UpsertSeen(ctx, projectID, toolName); err != nil {
+		app.logger.Warnw("agent_tools upsert failed", "err", err, "tool_name", toolName)
+	}
+}

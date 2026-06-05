@@ -43,6 +43,19 @@ func (app *application) mount() *chi.Mux {
 		r.Get("/openapi.json", app.openAPIHandler)
 		r.Get("/docs", app.docsHandler)
 
+		r.Route("/ingest", func(r chi.Router) {
+			r.Use(app.apiKeyAuth)
+			r.Post("/ai", app.ingestAIHandler)
+			r.Post("/events", app.ingestEventHandler)
+			r.Post("/metrics", app.ingestMetricHandler)
+
+			r.Route("/agent", func(r chi.Router) {
+				r.Post("/runs", app.ingestAgentRunStartHandler)
+				r.Post("/runs/{runID}/finish", app.ingestAgentRunFinishHandler)
+				r.Post("/steps", app.ingestAgentStepHandler)
+			})
+		})
+
 		r.Route("/admin", func(r chi.Router) {
 			r.Route("/projects", func(r chi.Router) {
 				r.Post("/", app.createProjectHandler)
