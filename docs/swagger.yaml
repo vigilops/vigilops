@@ -1,0 +1,285 @@
+basePath: /v1
+definitions:
+  main.createKeyPayload:
+    properties:
+      name:
+        maxLength: 100
+        minLength: 1
+        type: string
+    required:
+    - name
+    type: object
+  main.createKeyResponse:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: string
+      key:
+        description: plaintext, returned ONCE on creation
+        type: string
+      name:
+        type: string
+      project_id:
+        type: string
+    type: object
+  main.createProjectPayload:
+    properties:
+      name:
+        maxLength: 100
+        minLength: 1
+        type: string
+    required:
+    - name
+    type: object
+  store.APIKey:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: string
+      last_used_at:
+        type: string
+      name:
+        type: string
+      project_id:
+        type: string
+    type: object
+  store.Project:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+    type: object
+info:
+  contact: {}
+  description: Unified observability platform for AI agents, APIs, and infrastructure.
+  title: Keelwave API
+  version: 0.0.1
+paths:
+  /admin/keys/{keyID}:
+    delete:
+      consumes:
+      - application/json
+      description: Revokes an API key by UUID. Subsequent requests using this key
+        will return 401.
+      parameters:
+      - description: Key UUID
+        in: path
+        name: keyID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema: {}
+        "404":
+          description: Not Found
+          schema: {}
+        "500":
+          description: Internal Server Error
+          schema: {}
+      summary: Deletes an API key
+      tags:
+      - admin/keys
+  /admin/projects:
+    get:
+      consumes:
+      - application/json
+      description: Returns all projects ordered by created_at desc.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/store.Project'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema: {}
+      summary: Lists projects
+      tags:
+      - admin/projects
+    post:
+      consumes:
+      - application/json
+      description: Creates a tenant project; all ingest rows are scoped by project_id.
+      parameters:
+      - description: Project payload
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/main.createProjectPayload'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/store.Project'
+        "400":
+          description: Bad Request
+          schema: {}
+        "500":
+          description: Internal Server Error
+          schema: {}
+      summary: Creates a project
+      tags:
+      - admin/projects
+  /admin/projects/{projectID}:
+    delete:
+      consumes:
+      - application/json
+      description: Deletes a project and cascades to its api_keys and ingest rows.
+      parameters:
+      - description: Project UUID
+        in: path
+        name: projectID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema: {}
+        "404":
+          description: Not Found
+          schema: {}
+        "500":
+          description: Internal Server Error
+          schema: {}
+      summary: Deletes a project
+      tags:
+      - admin/projects
+    get:
+      consumes:
+      - application/json
+      description: Fetches a project by UUID.
+      parameters:
+      - description: Project UUID
+        in: path
+        name: projectID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/store.Project'
+        "400":
+          description: Bad Request
+          schema: {}
+        "404":
+          description: Not Found
+          schema: {}
+        "500":
+          description: Internal Server Error
+          schema: {}
+      summary: Fetches a project
+      tags:
+      - admin/projects
+  /admin/projects/{projectID}/keys:
+    get:
+      consumes:
+      - application/json
+      description: Returns all API keys for a project ordered by created_at desc.
+        Plaintext is never returned; only metadata and hash-derived ID.
+      parameters:
+      - description: Project UUID
+        in: path
+        name: projectID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/store.APIKey'
+            type: array
+        "400":
+          description: Bad Request
+          schema: {}
+        "500":
+          description: Internal Server Error
+          schema: {}
+      summary: Lists API keys
+      tags:
+      - admin/keys
+    post:
+      consumes:
+      - application/json
+      description: Generates a new API key for a project. Plaintext key is returned
+        ONCE in the response; only the SHA-256 hash is stored.
+      parameters:
+      - description: Project UUID
+        in: path
+        name: projectID
+        required: true
+        type: string
+      - description: Key payload
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/main.createKeyPayload'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/main.createKeyResponse'
+        "400":
+          description: Bad Request
+          schema: {}
+        "404":
+          description: Not Found
+          schema: {}
+        "500":
+          description: Internal Server Error
+          schema: {}
+      summary: Creates an API key
+      tags:
+      - admin/keys
+  /health:
+    get:
+      consumes:
+      - application/json
+      description: Returns service status, version, and environment.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Health check
+      tags:
+      - meta
+securityDefinitions:
+  ApiKeyAuth:
+    description: 'Format: "Bearer vgl_<token>"'
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"
