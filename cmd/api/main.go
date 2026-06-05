@@ -5,12 +5,24 @@ import (
 
 	"go.uber.org/zap"
 
+	_ "github.com/keelwave/keelwave/docs"
 	"github.com/keelwave/keelwave/internal/db"
 	"github.com/keelwave/keelwave/internal/env"
+	"github.com/keelwave/keelwave/internal/store"
 )
 
 const version = "0.0.1"
 
+//	@title			Keelwave API
+//	@description	Unified observability platform for AI agents, APIs, and infrastructure.
+//	@version		0.0.1
+
+// @BasePath					/v1
+//
+// @securityDefinitions.apikey	ApiKeyAuth
+// @in							header
+// @name						Authorization
+// @description				Format: "Bearer vgl_<token>"
 func main() {
 	cfg := config{
 		addr: env.GetString("ADDR", ":8080"),
@@ -35,6 +47,7 @@ func main() {
 	app := &application{
 		config: cfg,
 		pool:   pool,
+		store:  store.NewStorage(pool),
 		logger: logger,
 	}
 
