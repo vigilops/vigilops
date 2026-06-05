@@ -32,6 +32,65 @@ definitions:
     required:
     - name
     type: object
+  main.ingestAIPayload:
+    type: object
+  main.ingestAgentRunFinishPayload:
+    properties:
+      duration_ms:
+        minimum: 0
+        type: integer
+      loop_detected:
+        type: boolean
+      loop_step_index:
+        minimum: 0
+        type: integer
+      output:
+        maxLength: 100000
+        type: string
+      status:
+        enum:
+        - completed
+        - failed
+        type: string
+      termination_reason:
+        enum:
+        - clean
+        - max_steps_reached
+        - context_limit
+        - error
+        - loop_detected
+        - timeout
+        type: string
+      timestamp:
+        type: string
+      total_cost_usd:
+        minimum: 0
+        type: number
+      total_steps:
+        minimum: 0
+        type: integer
+      total_tokens:
+        minimum: 0
+        type: integer
+    required:
+    - status
+    - timestamp
+    type: object
+  main.ingestAgentRunStartPayload:
+    type: object
+  main.ingestAgentStepPayload:
+    type: object
+  main.ingestEventPayload:
+    type: object
+  main.ingestMetricPayload:
+    type: object
+  main.ingestResponse:
+    properties:
+      id:
+        type: string
+      timestamp:
+        type: string
+    type: object
   store.APIKey:
     properties:
       created_at:
@@ -276,6 +335,217 @@ paths:
       summary: Health check
       tags:
       - meta
+  /ingest/agent/runs:
+    post:
+      consumes:
+      - application/json
+      description: Opens a new agent run record with status="running". Returns id
+        + timestamp; the client must pass both back to finish the run.
+      parameters:
+      - description: Run start payload
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/main.ingestAgentRunStartPayload'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/main.ingestResponse'
+        "400":
+          description: Bad Request
+          schema: {}
+        "401":
+          description: Unauthorized
+          schema: {}
+        "500":
+          description: Internal Server Error
+          schema: {}
+      security:
+      - ApiKeyAuth: []
+      summary: Start an agent run
+      tags:
+      - ingest
+  /ingest/agent/runs/{runID}/finish:
+    post:
+      consumes:
+      - application/json
+      description: Marks a run terminal and writes totals. timestamp must match the
+        value returned at start (hypertable PK).
+      parameters:
+      - description: Agent run UUID
+        in: path
+        name: runID
+        required: true
+        type: string
+      - description: Run finish payload
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/main.ingestAgentRunFinishPayload'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema: {}
+        "401":
+          description: Unauthorized
+          schema: {}
+        "404":
+          description: Not Found
+          schema: {}
+        "500":
+          description: Internal Server Error
+          schema: {}
+      security:
+      - ApiKeyAuth: []
+      summary: Finish an agent run
+      tags:
+      - ingest
+  /ingest/agent/steps:
+    post:
+      consumes:
+      - application/json
+      description: Records one step in an agent loop. Server computes a SHA-256 fingerprint
+        of tool_name + tool_input for loop detection and bumps the agent_tools registry
+        when tool_name is present.
+      parameters:
+      - description: Step payload
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/main.ingestAgentStepPayload'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/main.ingestResponse'
+        "400":
+          description: Bad Request
+          schema: {}
+        "401":
+          description: Unauthorized
+          schema: {}
+        "500":
+          description: Internal Server Error
+          schema: {}
+      security:
+      - ApiKeyAuth: []
+      summary: Append an agent step
+      tags:
+      - ingest
+  /ingest/ai:
+    post:
+      consumes:
+      - application/json
+      description: 'Records one LLM call: model, token counts, cost, latency, status.
+        project_id is derived from the API key.'
+      parameters:
+      - description: AI trace payload
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/main.ingestAIPayload'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/main.ingestResponse'
+        "400":
+          description: Bad Request
+          schema: {}
+        "401":
+          description: Unauthorized
+          schema: {}
+        "500":
+          description: Internal Server Error
+          schema: {}
+      security:
+      - ApiKeyAuth: []
+      summary: Ingest an AI / LLM call trace
+      tags:
+      - ingest
+  /ingest/events:
+    post:
+      consumes:
+      - application/json
+      description: 'Records one HTTP request: method, path, status, duration. project_id
+        is derived from the API key.'
+      parameters:
+      - description: API event payload
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/main.ingestEventPayload'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/main.ingestResponse'
+        "400":
+          description: Bad Request
+          schema: {}
+        "401":
+          description: Unauthorized
+          schema: {}
+        "500":
+          description: Internal Server Error
+          schema: {}
+      security:
+      - ApiKeyAuth: []
+      summary: Ingest an HTTP request event
+      tags:
+      - ingest
+  /ingest/metrics:
+    post:
+      consumes:
+      - application/json
+      description: Records one infrastructure metric sample (cpu_percent, memory_used,
+        etc.). project_id is derived from the API key.
+      parameters:
+      - description: Metric payload
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/main.ingestMetricPayload'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/main.ingestResponse'
+        "400":
+          description: Bad Request
+          schema: {}
+        "401":
+          description: Unauthorized
+          schema: {}
+        "500":
+          description: Internal Server Error
+          schema: {}
+      security:
+      - ApiKeyAuth: []
+      summary: Ingest a host metric
+      tags:
+      - ingest
 securityDefinitions:
   ApiKeyAuth:
     description: 'Format: "Bearer vgl_<token>"'

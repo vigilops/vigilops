@@ -328,6 +328,320 @@ const docTemplate = `{
                     }
                 }
             }
+        },
+        "/ingest/agent/runs": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Opens a new agent run record with status=\"running\". Returns id + timestamp; the client must pass both back to finish the run.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ingest"
+                ],
+                "summary": "Start an agent run",
+                "parameters": [
+                    {
+                        "description": "Run start payload",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/main.ingestAgentRunStartPayload"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/main.ingestResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {}
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {}
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {}
+                    }
+                }
+            }
+        },
+        "/ingest/agent/runs/{runID}/finish": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Marks a run terminal and writes totals. timestamp must match the value returned at start (hypertable PK).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ingest"
+                ],
+                "summary": "Finish an agent run",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Agent run UUID",
+                        "name": "runID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Run finish payload",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/main.ingestAgentRunFinishPayload"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {}
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {}
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {}
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {}
+                    }
+                }
+            }
+        },
+        "/ingest/agent/steps": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Records one step in an agent loop. Server computes a SHA-256 fingerprint of tool_name + tool_input for loop detection and bumps the agent_tools registry when tool_name is present.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ingest"
+                ],
+                "summary": "Append an agent step",
+                "parameters": [
+                    {
+                        "description": "Step payload",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/main.ingestAgentStepPayload"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/main.ingestResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {}
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {}
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {}
+                    }
+                }
+            }
+        },
+        "/ingest/ai": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Records one LLM call: model, token counts, cost, latency, status. project_id is derived from the API key.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ingest"
+                ],
+                "summary": "Ingest an AI / LLM call trace",
+                "parameters": [
+                    {
+                        "description": "AI trace payload",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/main.ingestAIPayload"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/main.ingestResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {}
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {}
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {}
+                    }
+                }
+            }
+        },
+        "/ingest/events": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Records one HTTP request: method, path, status, duration. project_id is derived from the API key.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ingest"
+                ],
+                "summary": "Ingest an HTTP request event",
+                "parameters": [
+                    {
+                        "description": "API event payload",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/main.ingestEventPayload"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/main.ingestResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {}
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {}
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {}
+                    }
+                }
+            }
+        },
+        "/ingest/metrics": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Records one infrastructure metric sample (cpu_percent, memory_used, etc.). project_id is derived from the API key.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ingest"
+                ],
+                "summary": "Ingest a host metric",
+                "parameters": [
+                    {
+                        "description": "Metric payload",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/main.ingestMetricPayload"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/main.ingestResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {}
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {}
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {}
+                    }
+                }
+            }
         }
     },
     "definitions": {
@@ -375,6 +689,89 @@ const docTemplate = `{
                     "type": "string",
                     "maxLength": 100,
                     "minLength": 1
+                }
+            }
+        },
+        "main.ingestAIPayload": {
+            "type": "object"
+        },
+        "main.ingestAgentRunFinishPayload": {
+            "type": "object",
+            "required": [
+                "status",
+                "timestamp"
+            ],
+            "properties": {
+                "duration_ms": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "loop_detected": {
+                    "type": "boolean"
+                },
+                "loop_step_index": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "output": {
+                    "type": "string",
+                    "maxLength": 100000
+                },
+                "status": {
+                    "type": "string",
+                    "enum": [
+                        "completed",
+                        "failed"
+                    ]
+                },
+                "termination_reason": {
+                    "type": "string",
+                    "enum": [
+                        "clean",
+                        "max_steps_reached",
+                        "context_limit",
+                        "error",
+                        "loop_detected",
+                        "timeout"
+                    ]
+                },
+                "timestamp": {
+                    "type": "string"
+                },
+                "total_cost_usd": {
+                    "type": "number",
+                    "minimum": 0
+                },
+                "total_steps": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "total_tokens": {
+                    "type": "integer",
+                    "minimum": 0
+                }
+            }
+        },
+        "main.ingestAgentRunStartPayload": {
+            "type": "object"
+        },
+        "main.ingestAgentStepPayload": {
+            "type": "object"
+        },
+        "main.ingestEventPayload": {
+            "type": "object"
+        },
+        "main.ingestMetricPayload": {
+            "type": "object"
+        },
+        "main.ingestResponse": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "timestamp": {
+                    "type": "string"
                 }
             }
         },
