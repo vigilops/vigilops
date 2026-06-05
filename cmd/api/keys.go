@@ -151,5 +151,5 @@ func (app *application) deleteKeyHandler(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	w.WriteHeader(http.StatusNoContent)
+	app.noContentResponse(w)
 }
