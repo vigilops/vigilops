@@ -8,11 +8,14 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
+
+	"github.com/yusufnuru/vigil/internal/store"
 )
 
 type application struct {
 	config config
 	pool   *pgxpool.Pool
+	store  store.Storage
 	logger *zap.SugaredLogger
 }
 
@@ -37,6 +40,27 @@ func (app *application) mount() *chi.Mux {
 
 	r.Route("/v1", func(r chi.Router) {
 		r.Get("/health", app.healthHandler)
+		r.Get("/openapi.json", app.openAPIHandler)
+		r.Get("/docs", app.docsHandler)
+
+		r.Route("/admin", func(r chi.Router) {
+			r.Route("/projects", func(r chi.Router) {
+				r.Post("/", app.createProjectHandler)
+				r.Get("/", app.listProjectsHandler)
+
+				r.Route("/{projectID}", func(r chi.Router) {
+					r.Get("/", app.getProjectHandler)
+					r.Delete("/", app.deleteProjectHandler)
+
+					r.Route("/keys", func(r chi.Router) {
+						r.Post("/", app.createKeyHandler)
+						r.Get("/", app.listKeysHandler)
+					})
+				})
+			})
+
+			r.Delete("/keys/{keyID}", app.deleteKeyHandler)
+		})
 	})
 
 	return r
