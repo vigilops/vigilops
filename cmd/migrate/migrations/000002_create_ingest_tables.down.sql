@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS infra_metrics;
+DROP TABLE IF EXISTS api_events;
+DROP TABLE IF EXISTS ai_traces;
