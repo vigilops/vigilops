@@ -5,12 +5,24 @@ import (
 
 	"go.uber.org/zap"
 
+	_ "github.com/yusufnuru/vigil/docs"
 	"github.com/yusufnuru/vigil/internal/db"
 	"github.com/yusufnuru/vigil/internal/env"
+	"github.com/yusufnuru/vigil/internal/store"
 )
 
 const version = "0.0.1"
 
+//	@title			Vigil API
+//	@description	Unified observability platform for AI agents, APIs, and infrastructure.
+//	@version		0.0.1
+
+// @BasePath					/v1
+//
+// @securityDefinitions.apikey	ApiKeyAuth
+// @in							header
+// @name						Authorization
+// @description				Format: "Bearer vgl_<token>"
 func main() {
 	cfg := config{
 		addr: env.GetString("ADDR", ":8080"),
@@ -35,6 +47,7 @@ func main() {
 	app := &application{
 		config: cfg,
 		pool:   pool,
+		store:  store.NewStorage(pool),
 		logger: logger,
 	}
 
