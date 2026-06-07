@@ -2,9 +2,11 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"time"
 
+	"github.com/keelwave/keelwave/internal/batch"
 	"github.com/keelwave/keelwave/internal/store"
 )
 
@@ -52,9 +54,15 @@ func (app *application) ingestMetricHandler(w http.ResponseWriter, r *http.Reque
 	}
 	if payload.Timestamp != nil {
 		m.Timestamp = *payload.Timestamp
+	} else {
+		m.Timestamp = time.Now()
 	}
 
-	if err := app.store.InfraMetrics.Insert(r.Context(), m); err != nil {
+	if err := app.batchers.InfraMetrics.Enqueue(r.Context(), m); err != nil {
+		if errors.Is(err, batch.ErrBufferFull) {
+			app.serviceUnavailableResponse(w, r)
+			return
+		}
 		app.internalServerError(w, r, err)
 		return
 	}

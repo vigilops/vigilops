@@ -46,3 +46,10 @@ func (app *application) rateLimitResponse(w http.ResponseWriter, r *http.Request
 	}
 	_ = writeJSONError(w, http.StatusTooManyRequests, "rate limit exceeded")
 }
+
+func (app *application) serviceUnavailableResponse(w http.ResponseWriter, r *http.Request) {
+	app.logger.Warnw("ingest buffer full",
+		"method", r.Method, "path", r.URL.Path)
+	w.Header().Set("Retry-After", "1")
+	_ = writeJSONError(w, http.StatusServiceUnavailable, "ingest buffer full, retry")
+}

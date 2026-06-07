@@ -2,11 +2,16 @@ package main
 
 import (
 	"context"
+	"errors"
+	"net/http"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"go.uber.org/zap"
 
 	_ "github.com/keelwave/keelwave/docs"
+	"github.com/keelwave/keelwave/internal/batch"
 	"github.com/keelwave/keelwave/internal/db"
 	"github.com/keelwave/keelwave/internal/env"
 	"github.com/keelwave/keelwave/internal/store"
@@ -37,28 +42,74 @@ func main() {
 			ingestKeyPerMinute: env.GetInt("RATE_LIMIT_INGEST_KEY_PER_MINUTE", 1000),
 			ingestWindow:       parseDurationOr("RATE_LIMIT_INGEST_WINDOW", time.Minute),
 		},
+		batch: batchConfig{
+			flushInterval: parseDurationOr("BATCH_FLUSH_INTERVAL", 500*time.Millisecond),
+			maxRows:       env.GetInt("BATCH_MAX_ROWS", 500),
+			queueDepth:    env.GetInt("BATCH_QUEUE_DEPTH", 10_000),
+		},
+		shutdownTimeout: parseDurationOr("SHUTDOWN_TIMEOUT", 10*time.Second),
 	}
 
 	logger := zap.Must(zap.NewProduction()).Sugar()
 	defer logger.Sync()
 
-	ctx := context.Background()
-	pool, err := db.New(ctx, cfg.db.addr, cfg.db.maxConns)
+	rootCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	pool, err := db.New(rootCtx, cfg.db.addr, cfg.db.maxConns)
 	if err != nil {
 		logger.Fatalw("db connect failed", "err", err)
 	}
-	defer pool.Close()
 	logger.Info("db connected")
 
+	batchers := batch.NewBatchers(pool, batch.Config{
+		FlushInterval: cfg.batch.flushInterval,
+		MaxRows:       cfg.batch.maxRows,
+		QueueDepth:    cfg.batch.queueDepth,
+	}, logger)
+
+	batchers.Start(rootCtx)
+
 	app := &application{
-		config: cfg,
-		pool:   pool,
-		store:  store.NewStorage(pool),
-		logger: logger,
+		config:   cfg,
+		pool:     pool,
+		store:    store.NewStorage(pool),
+		batchers: batchers,
+		logger:   logger,
 	}
 
 	mux := app.mount()
-	logger.Fatal(app.run(mux))
+	srvErr := make(chan error, 1)
+	go func() {
+		if err := app.run(mux); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			srvErr <- err
+			return
+		}
+		srvErr <- nil
+	}()
+
+	select {
+	case err := <-srvErr:
+		if err != nil {
+			logger.Errorw("server exited with error", "err", err)
+		}
+	case <-rootCtx.Done():
+		logger.Infow("shutdown initiated")
+	}
+
+	shutCtx, cancel := context.WithTimeout(context.Background(), cfg.shutdownTimeout)
+	defer cancel()
+
+	if app.srv != nil {
+		if err := app.srv.Shutdown(shutCtx); err != nil {
+			logger.Warnw("server shutdown error", "err", err)
+		}
+	}
+	if err := batchers.Stop(shutCtx); err != nil {
+		logger.Warnw("batch drain incomplete", "err", err)
+	}
+	pool.Close()
+	logger.Info("shutdown complete")
 }
 
 func parseDurationOr(key string, def time.Duration) time.Duration {

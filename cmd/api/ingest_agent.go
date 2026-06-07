@@ -10,10 +10,9 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/keelwave/keelwave/internal/batch"
 	"github.com/keelwave/keelwave/internal/store"
 )
-
-// --- Start run ----------------------------------------------------------
 
 type ingestAgentRunStartPayload struct {
 	Timestamp *time.Time      `json:"timestamp,omitempty"`
@@ -187,7 +186,14 @@ func (app *application) ingestAgentStepHandler(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	id, err := uuid.NewV7()
+	if err != nil {
+		app.internalServerError(w, r, err)
+		return
+	}
+
 	step := &store.AgentStep{
+		ID:               id,
 		ProjectID:        projectID,
 		AgentRunID:       payload.AgentRunID,
 		StepIndex:        payload.StepIndex,
@@ -205,9 +211,15 @@ func (app *application) ingestAgentStepHandler(w http.ResponseWriter, r *http.Re
 	}
 	if payload.Timestamp != nil {
 		step.Timestamp = *payload.Timestamp
+	} else {
+		step.Timestamp = time.Now()
 	}
 
-	if err := app.store.AgentSteps.Insert(r.Context(), step); err != nil {
+	if err := app.batchers.AgentSteps.Enqueue(r.Context(), step); err != nil {
+		if errors.Is(err, batch.ErrBufferFull) {
+			app.serviceUnavailableResponse(w, r)
+			return
+		}
 		app.internalServerError(w, r, err)
 		return
 	}
