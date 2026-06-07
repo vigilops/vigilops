@@ -1,4 +1,4 @@
-.PHONY: run dev build tidy db-up db-down migrate-create migrate-up migrate-down migrate-force migrate-version gen-docs fmt test
+.PHONY: run dev build tidy db-up db-down migrate-create migrate-up migrate-down migrate-force migrate-version gen-docs fmt test seed
 
 MIGRATIONS_PATH = ./cmd/migrate/migrations
 DB_ADDR ?= postgres://vigil:vigil@localhost:5432/vigil?sslmode=disable
@@ -46,3 +46,6 @@ fmt:
 
 test:
 	@go test -v ./...
+
+seed:
+	@go run ./cmd/migrate/seed
