@@ -2,11 +2,13 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"time"
 
 	"github.com/google/uuid"
 
+	"github.com/yusufnuru/vigil/internal/batch"
 	"github.com/yusufnuru/vigil/internal/store"
 )
 
@@ -58,7 +60,14 @@ func (app *application) ingestAIHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	id, err := uuid.NewV7()
+	if err != nil {
+		app.internalServerError(w, r, err)
+		return
+	}
+
 	t := &store.AITrace{
+		ID:           id,
 		ProjectID:    projectID,
 		Model:        payload.Model,
 		Provider:     payload.Provider,
@@ -75,9 +84,15 @@ func (app *application) ingestAIHandler(w http.ResponseWriter, r *http.Request) 
 	}
 	if payload.Timestamp != nil {
 		t.Timestamp = *payload.Timestamp
+	} else {
+		t.Timestamp = time.Now()
 	}
 
-	if err := app.store.AITraces.Insert(r.Context(), t); err != nil {
+	if err := app.batchers.AITraces.Enqueue(r.Context(), t); err != nil {
+		if errors.Is(err, batch.ErrBufferFull) {
+			app.serviceUnavailableResponse(w, r)
+			return
+		}
 		app.internalServerError(w, r, err)
 		return
 	}

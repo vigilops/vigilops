@@ -2,10 +2,14 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"net"
 	"net/http"
 	"time"
 
+	"github.com/google/uuid"
+
+	"github.com/yusufnuru/vigil/internal/batch"
 	"github.com/yusufnuru/vigil/internal/store"
 )
 
@@ -57,7 +61,14 @@ func (app *application) ingestEventHandler(w http.ResponseWriter, r *http.Reques
 		ip = &parsed
 	}
 
+	id, err := uuid.NewV7()
+	if err != nil {
+		app.internalServerError(w, r, err)
+		return
+	}
+
 	e := &store.APIEvent{
+		ID:                id,
 		ProjectID:         projectID,
 		Service:           payload.Service,
 		Method:            payload.Method,
@@ -73,9 +84,15 @@ func (app *application) ingestEventHandler(w http.ResponseWriter, r *http.Reques
 	}
 	if payload.Timestamp != nil {
 		e.Timestamp = *payload.Timestamp
+	} else {
+		e.Timestamp = time.Now()
 	}
 
-	if err := app.store.APIEvents.Insert(r.Context(), e); err != nil {
+	if err := app.batchers.APIEvents.Enqueue(r.Context(), e); err != nil {
+		if errors.Is(err, batch.ErrBufferFull) {
+			app.serviceUnavailableResponse(w, r)
+			return
+		}
 		app.internalServerError(w, r, err)
 		return
 	}
