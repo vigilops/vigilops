@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"time"
 
 	"go.uber.org/zap"
 
@@ -31,6 +32,11 @@ func main() {
 			addr:     env.GetString("DB_ADDR", "postgres://vigil:vigil@localhost:5432/vigil?sslmode=disable"),
 			maxConns: int32(env.GetInt("DB_MAX_CONNS", 30)),
 		},
+		rateLimit: rateLimitConfig{
+			ingestIPPerMinute:  env.GetInt("RATE_LIMIT_INGEST_IP_PER_MINUTE", 100),
+			ingestKeyPerMinute: env.GetInt("RATE_LIMIT_INGEST_KEY_PER_MINUTE", 1000),
+			ingestWindow:       parseDurationOr("RATE_LIMIT_INGEST_WINDOW", time.Minute),
+		},
 	}
 
 	logger := zap.Must(zap.NewProduction()).Sugar()
@@ -53,4 +59,16 @@ func main() {
 
 	mux := app.mount()
 	logger.Fatal(app.run(mux))
+}
+
+func parseDurationOr(key string, def time.Duration) time.Duration {
+	s := env.GetString(key, "")
+	if s == "" {
+		return def
+	}
+	d, err := time.ParseDuration(s)
+	if err != nil {
+		return def
+	}
+	return d
 }

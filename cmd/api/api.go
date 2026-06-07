@@ -20,14 +20,21 @@ type application struct {
 }
 
 type config struct {
-	addr string
-	env  string
-	db   dbConfig
+	addr      string
+	env       string
+	db        dbConfig
+	rateLimit rateLimitConfig
 }
 
 type dbConfig struct {
 	addr     string
 	maxConns int32
+}
+
+type rateLimitConfig struct {
+	ingestIPPerMinute  int
+	ingestKeyPerMinute int
+	ingestWindow       time.Duration
 }
 
 func (app *application) mount() *chi.Mux {
@@ -44,7 +51,9 @@ func (app *application) mount() *chi.Mux {
 		r.Get("/docs", app.docsHandler)
 
 		r.Route("/ingest", func(r chi.Router) {
+			r.Use(app.ingestIPRateLimit())
 			r.Use(app.apiKeyAuth)
+			r.Use(app.ingestKeyRateLimit())
 			r.Post("/ai", app.ingestAIHandler)
 			r.Post("/events", app.ingestEventHandler)
 			r.Post("/metrics", app.ingestMetricHandler)
