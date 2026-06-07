@@ -9,21 +9,26 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 
+	"github.com/yusufnuru/vigil/internal/batch"
 	"github.com/yusufnuru/vigil/internal/store"
 )
 
 type application struct {
-	config config
-	pool   *pgxpool.Pool
-	store  store.Storage
-	logger *zap.SugaredLogger
+	config   config
+	pool     *pgxpool.Pool
+	store    store.Storage
+	batchers *batch.Batchers
+	srv      *http.Server
+	logger   *zap.SugaredLogger
 }
 
 type config struct {
-	addr      string
-	env       string
-	db        dbConfig
-	rateLimit rateLimitConfig
+	addr            string
+	env             string
+	db              dbConfig
+	rateLimit       rateLimitConfig
+	batch           batchConfig
+	shutdownTimeout time.Duration
 }
 
 type dbConfig struct {
@@ -35,6 +40,12 @@ type rateLimitConfig struct {
 	ingestIPPerMinute  int
 	ingestKeyPerMinute int
 	ingestWindow       time.Duration
+}
+
+type batchConfig struct {
+	flushInterval time.Duration
+	maxRows       int
+	queueDepth    int
 }
 
 func (app *application) mount() *chi.Mux {
@@ -89,7 +100,7 @@ func (app *application) mount() *chi.Mux {
 }
 
 func (app *application) run(mux http.Handler) error {
-	srv := &http.Server{
+	app.srv = &http.Server{
 		Addr:         app.config.addr,
 		Handler:      mux,
 		ReadTimeout:  30 * time.Second,
@@ -98,5 +109,5 @@ func (app *application) run(mux http.Handler) error {
 	}
 
 	app.logger.Infow("server started", "addr", app.config.addr, "env", app.config.env, "version", version)
-	return srv.ListenAndServe()
+	return app.srv.ListenAndServe()
 }
