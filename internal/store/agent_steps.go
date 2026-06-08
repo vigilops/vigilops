@@ -58,6 +58,82 @@ func (s *AgentStepStore) Insert(ctx context.Context, st *AgentStep) error {
 	).Scan(&st.ID)
 }
 
+type LoopHit struct {
+	Fingerprint []byte  `json:"fingerprint"`
+	Hits        int     `json:"hits"`
+	StepIndices []int   `json:"step_indices"`
+	ToolName    *string `json:"tool_name,omitempty"`
+}
+
+func (s *AgentStepStore) ListLoops(ctx context.Context, projectID, runID uuid.UUID, from, to time.Time) ([]*LoopHit, error) {
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+	defer cancel()
+
+	const q = `
+		SELECT input_fingerprint,
+		       count(*)::int                              AS hits,
+		       array_agg(step_index ORDER BY step_index) AS step_indices,
+		       max(tool_name)                             AS tool_name
+		FROM agent_steps
+		WHERE project_id = $1 AND agent_run_id = $2
+		  AND input_fingerprint IS NOT NULL
+		  AND timestamp >= $3 AND timestamp < $4
+		GROUP BY input_fingerprint
+		HAVING count(*) >= 2
+		ORDER BY hits DESC
+	`
+	rows, err := s.pool.Query(ctx, q, projectID, runID, from, to)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []*LoopHit
+	for rows.Next() {
+		h := &LoopHit{}
+		if err := rows.Scan(&h.Fingerprint, &h.Hits, &h.StepIndices, &h.ToolName); err != nil {
+			return nil, err
+		}
+		out = append(out, h)
+	}
+	return out, rows.Err()
+}
+
+func (s *AgentStepStore) ListByRun(ctx context.Context, projectID, runID uuid.UUID, from, to time.Time, limit int) ([]*AgentStep, error) {
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+	defer cancel()
+
+	const q = `
+		SELECT id, timestamp, project_id, agent_run_id, step_index, step_type,
+		       content, tool_name, tool_input, tool_output, tool_success,
+		       tool_latency_ms, input_fingerprint, tokens, cost_usd, metadata
+		FROM agent_steps
+		WHERE project_id = $1 AND agent_run_id = $2
+		  AND timestamp >= $3 AND timestamp < $4
+		ORDER BY step_index ASC
+		LIMIT $5
+	`
+	rows, err := s.pool.Query(ctx, q, projectID, runID, from, to, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []*AgentStep
+	for rows.Next() {
+		st := &AgentStep{}
+		if err := rows.Scan(
+			&st.ID, &st.Timestamp, &st.ProjectID, &st.AgentRunID, &st.StepIndex, &st.StepType,
+			&st.Content, &st.ToolName, &st.ToolInput, &st.ToolOutput, &st.ToolSuccess,
+			&st.ToolLatencyMs, &st.InputFingerprint, &st.Tokens, &st.CostUSD, &st.Metadata,
+		); err != nil {
+			return nil, err
+		}
+		out = append(out, st)
+	}
+	return out, rows.Err()
+}
+
 // CountFingerprint returns how many times this fingerprint already appears in
 // the run. Used by loop detection: ≥2 = repeated tool_name+input.
 func (s *AgentStepStore) CountFingerprint(ctx context.Context, runID uuid.UUID, fingerprint []byte) (int, error) {

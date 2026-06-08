@@ -252,3 +252,155 @@ func (app *application) upsertTool(projectID uuid.UUID, toolName string) {
 		app.logger.Warnw("agent_tools upsert failed", "err", err, "tool_name", toolName)
 	}
 }
+
+// --- Reads --------------------------------------------------------------
+
+// ListAgentRuns godoc
+//
+//	@Summary	List agent runs for the calling project
+//	@Tags		agent
+//	@Produce	json
+//	@Param		from	query		string	false	"RFC3339, default now - 30d"
+//	@Param		to		query		string	false	"RFC3339, default now"
+//	@Param		limit	query		int		false	"default 25, max 1000"
+//	@Param		offset	query		int		false	"default 0"
+//	@Success	200		{array}		store.AgentRun
+//	@Failure	400		{object}	error
+//	@Failure	401		{object}	error
+//	@Failure	500		{object}	error
+//	@Security	ApiKeyAuth
+//	@Router		/agent/runs [get]
+func (app *application) listAgentRunsHandler(w http.ResponseWriter, r *http.Request) {
+	projectID := projectIDFromContext(r.Context())
+	params, err := parseListParams(r)
+	if err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+	runs, err := app.store.AgentRuns.ListByProject(r.Context(), projectID, params.From, params.To, params.Limit, params.Offset)
+	if err != nil {
+		app.internalServerError(w, r, err)
+		return
+	}
+	if err := app.jsonResponse(w, http.StatusOK, runs); err != nil {
+		app.internalServerError(w, r, err)
+	}
+}
+
+// GetAgentRun godoc
+//
+//	@Summary	Fetch a single agent run by id
+//	@Tags		agent
+//	@Produce	json
+//	@Param		runID	path		string	true	"Agent run UUID"
+//	@Param		at		query		string	false	"RFC3339; if set, lookup is bounded to a 2s window for fast chunk pruning"
+//	@Success	200		{object}	store.AgentRun
+//	@Failure	400		{object}	error
+//	@Failure	401		{object}	error
+//	@Failure	404		{object}	error
+//	@Failure	500		{object}	error
+//	@Security	ApiKeyAuth
+//	@Router		/agent/runs/{runID} [get]
+func (app *application) getAgentRunHandler(w http.ResponseWriter, r *http.Request) {
+	projectID := projectIDFromContext(r.Context())
+	runID, err := parseUUIDParam(r, "runID")
+	if err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+	from, to, err := parseAtWindow(r)
+	if err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+	run, err := app.store.AgentRuns.GetByID(r.Context(), projectID, runID, from, to)
+	if err != nil {
+		switch {
+		case errors.Is(err, store.ErrNotFound):
+			app.notFoundResponse(w, r, err)
+		default:
+			app.internalServerError(w, r, err)
+		}
+		return
+	}
+	if err := app.jsonResponse(w, http.StatusOK, run); err != nil {
+		app.internalServerError(w, r, err)
+	}
+}
+
+// ListAgentSteps godoc
+//
+//	@Summary	List steps for an agent run, ordered by step_index asc
+//	@Tags		agent
+//	@Produce	json
+//	@Param		runID	path		string	true	"Agent run UUID"
+//	@Param		at		query		string	false	"RFC3339 hint for chunk pruning"
+//	@Param		limit	query		int		false	"default 1000, max 1000"
+//	@Success	200		{array}		store.AgentStep
+//	@Failure	400		{object}	error
+//	@Failure	401		{object}	error
+//	@Failure	500		{object}	error
+//	@Security	ApiKeyAuth
+//	@Router		/agent/runs/{runID}/steps [get]
+func (app *application) listAgentStepsHandler(w http.ResponseWriter, r *http.Request) {
+	projectID := projectIDFromContext(r.Context())
+	runID, err := parseUUIDParam(r, "runID")
+	if err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+	from, to, err := parseAtWindow(r)
+	if err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+	limit, err := parseIntInRange(r.URL.Query().Get("limit"), maxStepsLimit, 1, maxStepsLimit)
+	if err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+	steps, err := app.store.AgentSteps.ListByRun(r.Context(), projectID, runID, from, to, limit)
+	if err != nil {
+		app.internalServerError(w, r, err)
+		return
+	}
+	if err := app.jsonResponse(w, http.StatusOK, steps); err != nil {
+		app.internalServerError(w, r, err)
+	}
+}
+
+// ListAgentLoops godoc
+//
+//	@Summary		Loop detection for an agent run
+//	@Description	Returns each tool_name + input fingerprint repeated >= 2 times.
+//	@Tags			agent
+//	@Produce		json
+//	@Param			runID	path		string	true	"Agent run UUID"
+//	@Param			at		query		string	false	"RFC3339 hint for chunk pruning"
+//	@Success		200		{array}		store.LoopHit
+//	@Failure		400		{object}	error
+//	@Failure		401		{object}	error
+//	@Failure		500		{object}	error
+//	@Security		ApiKeyAuth
+//	@Router			/agent/runs/{runID}/loops [get]
+func (app *application) listAgentLoopsHandler(w http.ResponseWriter, r *http.Request) {
+	projectID := projectIDFromContext(r.Context())
+	runID, err := parseUUIDParam(r, "runID")
+	if err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+	from, to, err := parseAtWindow(r)
+	if err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+	hits, err := app.store.AgentSteps.ListLoops(r.Context(), projectID, runID, from, to)
+	if err != nil {
+		app.internalServerError(w, r, err)
+		return
+	}
+	if err := app.jsonResponse(w, http.StatusOK, hits); err != nil {
+		app.internalServerError(w, r, err)
+	}
+}
