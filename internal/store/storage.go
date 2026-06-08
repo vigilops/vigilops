@@ -41,10 +41,14 @@ type Storage struct {
 	AgentRuns interface {
 		Insert(ctx context.Context, r *AgentRun) error
 		Finish(ctx context.Context, id uuid.UUID, ts time.Time, f AgentRunFinish) error
+		GetByID(ctx context.Context, projectID, runID uuid.UUID, from, to time.Time) (*AgentRun, error)
+		ListByProject(ctx context.Context, projectID uuid.UUID, from, to time.Time, limit, offset int) ([]*AgentRun, error)
 	}
 	AgentSteps interface {
 		Insert(ctx context.Context, st *AgentStep) error
 		CountFingerprint(ctx context.Context, runID uuid.UUID, fingerprint []byte) (int, error)
+		ListByRun(ctx context.Context, projectID, runID uuid.UUID, from, to time.Time, limit int) ([]*AgentStep, error)
+		ListLoops(ctx context.Context, projectID, runID uuid.UUID, from, to time.Time) ([]*LoopHit, error)
 	}
 	AgentTools interface {
 		UpsertSeen(ctx context.Context, projectID uuid.UUID, toolName string) error

@@ -104,6 +104,101 @@ definitions:
       project_id:
         type: string
     type: object
+  store.AgentRun:
+    properties:
+      agent_name:
+        type: string
+      duration_ms:
+        type: integer
+      finished_at:
+        type: string
+      id:
+        type: string
+      input:
+        type: string
+      loop_detected:
+        type: boolean
+      loop_step_index:
+        type: integer
+      metadata:
+        items:
+          type: integer
+        type: array
+      output:
+        type: string
+      project_id:
+        type: string
+      status:
+        type: string
+      termination_reason:
+        type: string
+      timestamp:
+        type: string
+      total_cost_usd:
+        type: number
+      total_steps:
+        type: integer
+      total_tokens:
+        type: integer
+    type: object
+  store.AgentStep:
+    properties:
+      agent_run_id:
+        type: string
+      content:
+        type: string
+      cost_usd:
+        type: number
+      id:
+        type: string
+      input_fingerprint:
+        items:
+          type: integer
+        type: array
+      metadata:
+        items:
+          type: integer
+        type: array
+      project_id:
+        type: string
+      step_index:
+        type: integer
+      step_type:
+        type: string
+      timestamp:
+        type: string
+      tokens:
+        type: integer
+      tool_input:
+        items:
+          type: integer
+        type: array
+      tool_latency_ms:
+        type: integer
+      tool_name:
+        type: string
+      tool_output:
+        items:
+          type: integer
+        type: array
+      tool_success:
+        type: boolean
+    type: object
+  store.LoopHit:
+    properties:
+      fingerprint:
+        items:
+          type: integer
+        type: array
+      hits:
+        type: integer
+      step_indices:
+        items:
+          type: integer
+        type: array
+      tool_name:
+        type: string
+    type: object
   store.Project:
     properties:
       created_at:
@@ -318,6 +413,160 @@ paths:
       summary: Creates an API key
       tags:
       - admin/keys
+  /agent/runs:
+    get:
+      parameters:
+      - description: RFC3339, default now - 30d
+        in: query
+        name: from
+        type: string
+      - description: RFC3339, default now
+        in: query
+        name: to
+        type: string
+      - description: default 25, max 1000
+        in: query
+        name: limit
+        type: integer
+      - description: default 0
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/store.AgentRun'
+            type: array
+        "400":
+          description: Bad Request
+          schema: {}
+        "401":
+          description: Unauthorized
+          schema: {}
+        "500":
+          description: Internal Server Error
+          schema: {}
+      security:
+      - ApiKeyAuth: []
+      summary: List agent runs for the calling project
+      tags:
+      - agent
+  /agent/runs/{runID}:
+    get:
+      parameters:
+      - description: Agent run UUID
+        in: path
+        name: runID
+        required: true
+        type: string
+      - description: RFC3339; if set, lookup is bounded to a 2s window for fast chunk
+          pruning
+        in: query
+        name: at
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/store.AgentRun'
+        "400":
+          description: Bad Request
+          schema: {}
+        "401":
+          description: Unauthorized
+          schema: {}
+        "404":
+          description: Not Found
+          schema: {}
+        "500":
+          description: Internal Server Error
+          schema: {}
+      security:
+      - ApiKeyAuth: []
+      summary: Fetch a single agent run by id
+      tags:
+      - agent
+  /agent/runs/{runID}/loops:
+    get:
+      description: Returns each tool_name + input fingerprint repeated >= 2 times.
+      parameters:
+      - description: Agent run UUID
+        in: path
+        name: runID
+        required: true
+        type: string
+      - description: RFC3339 hint for chunk pruning
+        in: query
+        name: at
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/store.LoopHit'
+            type: array
+        "400":
+          description: Bad Request
+          schema: {}
+        "401":
+          description: Unauthorized
+          schema: {}
+        "500":
+          description: Internal Server Error
+          schema: {}
+      security:
+      - ApiKeyAuth: []
+      summary: Loop detection for an agent run
+      tags:
+      - agent
+  /agent/runs/{runID}/steps:
+    get:
+      parameters:
+      - description: Agent run UUID
+        in: path
+        name: runID
+        required: true
+        type: string
+      - description: RFC3339 hint for chunk pruning
+        in: query
+        name: at
+        type: string
+      - description: default 1000, max 1000
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/store.AgentStep'
+            type: array
+        "400":
+          description: Bad Request
+          schema: {}
+        "401":
+          description: Unauthorized
+          schema: {}
+        "500":
+          description: Internal Server Error
+          schema: {}
+      security:
+      - ApiKeyAuth: []
+      summary: List steps for an agent run, ordered by step_index asc
+      tags:
+      - agent
   /health:
     get:
       consumes:

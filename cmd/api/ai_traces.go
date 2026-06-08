@@ -28,11 +28,6 @@ type ingestAIPayload struct {
 	Metadata     json.RawMessage `json:"metadata,omitempty"`
 }
 
-type ingestResponse struct {
-	ID        *uuid.UUID `json:"id,omitempty"`
-	Timestamp time.Time  `json:"timestamp"`
-}
-
 // IngestAI godoc
 //
 //	@Summary		Ingest an AI / LLM call trace

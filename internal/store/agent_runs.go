@@ -2,9 +2,11 @@ package store
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -62,6 +64,72 @@ func (s *AgentRunStore) Insert(ctx context.Context, r *AgentRun) error {
 		r.Timestamp, r.ProjectID, r.AgentName, r.Status,
 		r.Input, r.Metadata,
 	).Scan(&r.ID)
+}
+
+func (s *AgentRunStore) ListByProject(ctx context.Context, projectID uuid.UUID, from, to time.Time, limit, offset int) ([]*AgentRun, error) {
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+	defer cancel()
+
+	const q = `
+		SELECT id, timestamp, project_id, agent_name, status,
+		       termination_reason, loop_detected, loop_step_index,
+		       total_steps, total_tokens, total_cost_usd, duration_ms,
+		       input, output, metadata, finished_at
+		FROM agent_runs
+		WHERE project_id = $1 AND timestamp >= $2 AND timestamp < $3
+		ORDER BY timestamp DESC
+		LIMIT $4 OFFSET $5
+	`
+	rows, err := s.pool.Query(ctx, q, projectID, from, to, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []*AgentRun
+	for rows.Next() {
+		r := &AgentRun{}
+		if err := rows.Scan(
+			&r.ID, &r.Timestamp, &r.ProjectID, &r.AgentName, &r.Status,
+			&r.TerminationReason, &r.LoopDetected, &r.LoopStepIndex,
+			&r.TotalSteps, &r.TotalTokens, &r.TotalCostUSD, &r.DurationMs,
+			&r.Input, &r.Output, &r.Metadata, &r.FinishedAt,
+		); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+func (s *AgentRunStore) GetByID(ctx context.Context, projectID, runID uuid.UUID, from, to time.Time) (*AgentRun, error) {
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+	defer cancel()
+
+	const q = `
+		SELECT id, timestamp, project_id, agent_name, status,
+		       termination_reason, loop_detected, loop_step_index,
+		       total_steps, total_tokens, total_cost_usd, duration_ms,
+		       input, output, metadata, finished_at
+		FROM agent_runs
+		WHERE project_id = $1 AND id = $2
+		  AND timestamp >= $3 AND timestamp < $4
+		LIMIT 1
+	`
+	r := &AgentRun{}
+	err := s.pool.QueryRow(ctx, q, projectID, runID, from, to).Scan(
+		&r.ID, &r.Timestamp, &r.ProjectID, &r.AgentName, &r.Status,
+		&r.TerminationReason, &r.LoopDetected, &r.LoopStepIndex,
+		&r.TotalSteps, &r.TotalTokens, &r.TotalCostUSD, &r.DurationMs,
+		&r.Input, &r.Output, &r.Metadata, &r.FinishedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	return r, nil
 }
 
 // Finish marks a run terminal. Caller passes id + timestamp because hypertable
