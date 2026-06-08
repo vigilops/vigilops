@@ -76,6 +76,14 @@ func (app *application) mount() *chi.Mux {
 			})
 		})
 
+		r.Route("/agent/runs", func(r chi.Router) {
+			r.Use(app.apiKeyAuth)
+			r.Get("/", app.listAgentRunsHandler)
+			r.Get("/{runID}", app.getAgentRunHandler)
+			r.Get("/{runID}/steps", app.listAgentStepsHandler)
+			r.Get("/{runID}/loops", app.listAgentLoopsHandler)
+		})
+
 		r.Route("/admin", func(r chi.Router) {
 			r.Route("/projects", func(r chi.Router) {
 				r.Post("/", app.createProjectHandler)
