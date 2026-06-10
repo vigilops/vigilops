@@ -86,7 +86,7 @@ func (s *AgentRunStore) ListByProject(ctx context.Context, projectID uuid.UUID, 
 	}
 	defer rows.Close()
 
-	var out []*AgentRun
+	out := make([]*AgentRun, 0)
 	for rows.Next() {
 		r := &AgentRun{}
 		if err := rows.Scan(

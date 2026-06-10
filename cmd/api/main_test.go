@@ -41,9 +41,6 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// newTestServer builds a real *application against the shared test pool and
-// serves it on a local listener. Returns the server, the seeded project ID,
-// and the plaintext API key the caller uses for Authorization headers.
 func newTestServer(t *testing.T) (srv *httptest.Server, projectID string, apiKey string, app *application) {
 	t.Helper()
 	ctx := context.Background()

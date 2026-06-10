@@ -31,6 +31,17 @@ func TestAgentEvaluationStore_Insert_assignsIDAndEvaluatedAt(t *testing.T) {
 	assert.False(t, ev.EvaluatedAt.IsZero())
 }
 
+func TestAgentEvaluationStore_ListByRun_returnsEmptySliceNotNil(t *testing.T) {
+	ctx := context.Background()
+	s := testStorage(t)
+	_ = testProject(t, s, "eval-empty")
+
+	out, err := s.AgentEvaluations.ListByRun(ctx, uuid.New())
+	require.NoError(t, err)
+	require.NotNil(t, out)
+	assert.Len(t, out, 0)
+}
+
 func TestAgentEvaluationStore_ListByRun_returnsOnlyThatRunsEvals(t *testing.T) {
 	ctx := context.Background()
 	s := testStorage(t)

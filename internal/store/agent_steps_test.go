@@ -120,3 +120,33 @@ func TestAgentStepStore_ListLoops_groupsByFingerprint_filtersBelowTwo(t *testing
 	require.NotNil(t, hits[0].ToolName)
 	assert.Equal(t, "search", *hits[0].ToolName)
 }
+
+func TestAgentStepStore_ListLoops_returnsEmptySliceNotNil(t *testing.T) {
+	ctx := context.Background()
+	s := testStorage(t)
+	p := testProject(t, s, "loops-empty")
+
+	run := &AgentRun{ProjectID: p.ID, AgentName: "a", Status: "running"}
+	require.NoError(t, s.AgentRuns.Insert(ctx, run))
+
+	hits, err := s.AgentSteps.ListLoops(ctx, p.ID, run.ID,
+		run.Timestamp.Add(-time.Hour), run.Timestamp.Add(time.Hour))
+	require.NoError(t, err)
+	require.NotNil(t, hits, "must return [] not nil so JSON renders as array")
+	assert.Len(t, hits, 0)
+}
+
+func TestAgentStepStore_ListByRun_returnsEmptySliceNotNil(t *testing.T) {
+	ctx := context.Background()
+	s := testStorage(t)
+	p := testProject(t, s, "steps-empty")
+
+	run := &AgentRun{ProjectID: p.ID, AgentName: "a", Status: "running"}
+	require.NoError(t, s.AgentRuns.Insert(ctx, run))
+
+	steps, err := s.AgentSteps.ListByRun(ctx, p.ID, run.ID,
+		run.Timestamp.Add(-time.Hour), run.Timestamp.Add(time.Hour), 100)
+	require.NoError(t, err)
+	require.NotNil(t, steps)
+	assert.Len(t, steps, 0)
+}

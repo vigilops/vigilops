@@ -62,7 +62,7 @@ func (s *AgentEvaluationStore) ListByRun(ctx context.Context, runID uuid.UUID) (
 	}
 	defer rows.Close()
 
-	var out []*AgentEvaluation
+	out := make([]*AgentEvaluation, 0)
 	for rows.Next() {
 		ev := &AgentEvaluation{}
 		if err := rows.Scan(
