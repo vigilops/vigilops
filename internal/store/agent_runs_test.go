@@ -107,6 +107,19 @@ func TestAgentRunStore_Finish_notFoundOnWrongTimestamp(t *testing.T) {
 	assert.ErrorIs(t, err, ErrNotFound)
 }
 
+func TestAgentRunStore_ListByProject_returnsEmptySliceNotNil(t *testing.T) {
+	ctx := context.Background()
+	s := testStorage(t)
+	p := testProject(t, s, "runs-empty")
+
+	from := time.Now().Add(-time.Hour)
+	to := time.Now().Add(time.Hour)
+	runs, err := s.AgentRuns.ListByProject(ctx, p.ID, from, to, 10, 0)
+	require.NoError(t, err)
+	require.NotNil(t, runs)
+	assert.Len(t, runs, 0)
+}
+
 func TestAgentRunStore_ListByProject_paginatesNewestFirst(t *testing.T) {
 	ctx := context.Background()
 	s := testStorage(t)

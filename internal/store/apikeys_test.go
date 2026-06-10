@@ -64,6 +64,17 @@ func TestAPIKeyStore_TouchLastUsed_setsTimestamp(t *testing.T) {
 	require.NotNil(t, got.LastUsedAt)
 }
 
+func TestAPIKeyStore_ListByProject_returnsEmptySliceNotNil(t *testing.T) {
+	ctx := context.Background()
+	s := testStorage(t)
+	p := testProject(t, s, "keys-empty")
+
+	keys, err := s.APIKeys.ListByProject(ctx, p.ID)
+	require.NoError(t, err)
+	require.NotNil(t, keys)
+	assert.Len(t, keys, 0)
+}
+
 func TestAPIKeyStore_ListByProject_orderedNewestFirst(t *testing.T) {
 	ctx := context.Background()
 	s := testStorage(t)
