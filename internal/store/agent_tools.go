@@ -54,7 +54,7 @@ func (s *AgentToolStore) ListByProject(ctx context.Context, projectID uuid.UUID)
 	}
 	defer rows.Close()
 
-	var out []*AgentTool
+	out := make([]*AgentTool, 0)
 	for rows.Next() {
 		t := &AgentTool{}
 		if err := rows.Scan(

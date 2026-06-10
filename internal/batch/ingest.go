@@ -42,12 +42,13 @@ func (b *Batchers) Start(ctx context.Context) {
 // Stop drains every buffer under the shared ctx deadline.
 func (b *Batchers) Stop(ctx context.Context) error {
 	var firstErr error
-	for _, buf := range []interface {
-		Stop(ctx context.Context) error
-	}{
-		b.AITraces, b.APIEvents, b.InfraMetrics, b.AgentSteps,
+	for _, err := range []error{
+		b.AITraces.Stop(ctx),
+		b.APIEvents.Stop(ctx),
+		b.InfraMetrics.Stop(ctx),
+		b.AgentSteps.Stop(ctx),
 	} {
-		if err := buf.Stop(ctx); err != nil && firstErr == nil {
+		if err != nil && firstErr == nil {
 			firstErr = err
 		}
 	}

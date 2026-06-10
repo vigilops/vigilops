@@ -88,7 +88,7 @@ func (s *AgentStepStore) ListLoops(ctx context.Context, projectID, runID uuid.UU
 	}
 	defer rows.Close()
 
-	var out []*LoopHit
+	out := make([]*LoopHit, 0)
 	for rows.Next() {
 		h := &LoopHit{}
 		if err := rows.Scan(&h.Fingerprint, &h.Hits, &h.StepIndices, &h.ToolName); err != nil {
@@ -119,7 +119,7 @@ func (s *AgentStepStore) ListByRun(ctx context.Context, projectID, runID uuid.UU
 	}
 	defer rows.Close()
 
-	var out []*AgentStep
+	out := make([]*AgentStep, 0)
 	for rows.Next() {
 		st := &AgentStep{}
 		if err := rows.Scan(

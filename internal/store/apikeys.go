@@ -83,7 +83,7 @@ func (s *APIKeyStore) ListByProject(ctx context.Context, projectID uuid.UUID) ([
 	}
 	defer rows.Close()
 
-	var keys []*APIKey
+	keys := make([]*APIKey, 0)
 	for rows.Next() {
 		k := &APIKey{}
 		if err := rows.Scan(

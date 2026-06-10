@@ -56,6 +56,7 @@ func New[T any](name string, cfg Config, logger *zap.SugaredLogger, flush FlushF
 	}
 }
 
+// Start is non-blocking; runs flush loop in background.
 func (b *Buffer[T]) Start(ctx context.Context) {
 	b.wg.Add(1)
 	go b.run(ctx)
@@ -102,10 +103,6 @@ func (b *Buffer[T]) run(_ context.Context) {
 		}
 		rows := batch
 		batch = make([]T, 0, b.cfg.MaxRows)
-		// Use a fresh ctx — the rootCtx that fired SIGTERM is already
-		// cancelled, and passing it to pgx.CopyFrom would abort the drain
-		// mid-flight. The drain's wall-clock budget is enforced by the
-		// ctx passed to Buffer.Stop.
 		if err := b.flush(context.Background(), rows); err != nil {
 			b.logger.Errorw("batch flush failed — rows dropped",
 				"table", b.name, "rows", len(rows), "err", err)

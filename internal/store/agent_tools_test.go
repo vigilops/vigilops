@@ -29,6 +29,17 @@ func TestAgentToolStore_UpsertSeen_insertsThenBumpsLastSeen(t *testing.T) {
 	assert.True(t, second[0].LastSeenAt.After(firstLast) || second[0].LastSeenAt.Equal(firstLast), "last_seen_at bumped")
 }
 
+func TestAgentToolStore_ListByProject_returnsEmptySliceNotNil(t *testing.T) {
+	ctx := context.Background()
+	s := testStorage(t)
+	p := testProject(t, s, "tools-empty")
+
+	out, err := s.AgentTools.ListByProject(ctx, p.ID)
+	require.NoError(t, err)
+	require.NotNil(t, out)
+	assert.Len(t, out, 0)
+}
+
 func TestAgentToolStore_ListByProject_isolatedAcrossProjects(t *testing.T) {
 	ctx := context.Background()
 	s := testStorage(t)
