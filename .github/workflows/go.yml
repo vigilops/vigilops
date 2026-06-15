@@ -13,6 +13,26 @@ jobs:
 
   build:
     runs-on: blacksmith-4vcpu-ubuntu-2404
+
+    services:
+      db:
+        image: timescale/timescaledb:latest-pg18
+        env:
+          POSTGRES_USER: vigil
+          POSTGRES_PASSWORD: vigil
+          POSTGRES_DB: vigil
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U vigil -d vigil"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      DB_ADDR: postgres://vigil:vigil@localhost:5432/vigil?sslmode=disable
+      TEST_DB_ADDR: postgres://vigil:vigil@localhost:5432/vigil?sslmode=disable
+
     steps:
     - uses: actions/checkout@v4
 
@@ -20,6 +40,15 @@ jobs:
       uses: useblacksmith/setup-go@v6
       with:
         go-version-file: 'go.mod'
+
+    - name: Install golang-migrate
+      run: |
+        curl -fsSL https://github.com/golang-migrate/migrate/releases/download/v4.17.1/migrate.linux-amd64.tar.gz \
+          | tar xz -C /usr/local/bin migrate
+        migrate -version
+
+    - name: Run database migrations
+      run: migrate -path=./cmd/migrate/migrations -database="$DB_ADDR" up
 
     - name: Build
       run: go build -v ./...
