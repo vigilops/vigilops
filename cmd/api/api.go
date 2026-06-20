@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/cors"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 
@@ -25,6 +26,7 @@ type application struct {
 type config struct {
 	addr            string
 	env             string
+	corsOrigins     []string
 	db              dbConfig
 	rateLimit       rateLimitConfig
 	batch           batchConfig
@@ -54,6 +56,13 @@ func (app *application) mount() *chi.Mux {
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
+	r.Use(cors.Handler(cors.Options{
+		AllowedOrigins:   app.config.corsOrigins,
+		AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodDelete, http.MethodOptions},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-API-Key"},
+		AllowCredentials: false,
+		MaxAge:           300,
+	}))
 	r.Use(middleware.Timeout(60 * time.Second))
 
 	r.Route("/v1", func(r chi.Router) {
@@ -76,12 +85,18 @@ func (app *application) mount() *chi.Mux {
 			})
 		})
 
-		r.Route("/agent/runs", func(r chi.Router) {
+		r.Route("/agent", func(r chi.Router) {
 			r.Use(app.apiKeyAuth)
-			r.Get("/", app.listAgentRunsHandler)
-			r.Get("/{runID}", app.getAgentRunHandler)
-			r.Get("/{runID}/steps", app.listAgentStepsHandler)
-			r.Get("/{runID}/loops", app.listAgentLoopsHandler)
+			r.Get("/health", app.runHealthHandler)
+			r.Get("/tools/stats", app.toolStatsHandler)
+
+			r.Route("/runs", func(r chi.Router) {
+				r.Get("/", app.listAgentRunsHandler)
+				r.Get("/timeseries", app.runsTimeseriesHandler)
+				r.Get("/{runID}", app.getAgentRunHandler)
+				r.Get("/{runID}/steps", app.listAgentStepsHandler)
+				r.Get("/{runID}/loops", app.listAgentLoopsHandler)
+			})
 		})
 
 		r.Route("/admin", func(r chi.Router) {

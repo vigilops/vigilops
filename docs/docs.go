@@ -303,6 +303,60 @@ const docTemplate = `{
                 }
             }
         },
+        "/agent/health": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Rolls up run outcomes per agent_name: total runs, completion rate, loop rate, avg cost, and avg tokens over the window.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "agent"
+                ],
+                "summary": "Per-agent run-health rollup for the calling project",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "RFC3339, default now - 30d",
+                        "name": "from",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "RFC3339, default now",
+                        "name": "to",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/store.RunHealthRow"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {}
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {}
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {}
+                    }
+                }
+            }
+        },
         "/agent/runs": {
             "get": {
                 "security": [
@@ -350,6 +404,66 @@ const docTemplate = `{
                             "type": "array",
                             "items": {
                                 "$ref": "#/definitions/store.AgentRun"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {}
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {}
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {}
+                    }
+                }
+            }
+        },
+        "/agent/runs/timeseries": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns per-bucket run outcome counts (total, completed, failed, loop) via TimescaleDB time_bucket. bucket is one of 1h, 6h, 1d.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "agent"
+                ],
+                "summary": "Bucketed run counts over time for the calling project",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "RFC3339, default now - 30d",
+                        "name": "from",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "RFC3339, default now",
+                        "name": "to",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "bucket size: 1h (default), 6h, 1d",
+                        "name": "bucket",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/store.RunBucket"
                             }
                         }
                     },
@@ -520,6 +634,60 @@ const docTemplate = `{
                             "type": "array",
                             "items": {
                                 "$ref": "#/definitions/store.AgentStep"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {}
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {}
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {}
+                    }
+                }
+            }
+        },
+        "/agent/tools/stats": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Aggregates tool calls across every run in the window: call count, success/fail counts, success rate, and p95 latency per tool.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "agent"
+                ],
+                "summary": "Per-tool usage analytics for the calling project",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "RFC3339, default now - 30d",
+                        "name": "from",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "RFC3339, default now",
+                        "name": "to",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/store.ToolStat"
                             }
                         }
                     },
@@ -1184,6 +1352,78 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "store.RunBucket": {
+            "type": "object",
+            "properties": {
+                "bucket": {
+                    "type": "string"
+                },
+                "completed": {
+                    "type": "integer"
+                },
+                "failed": {
+                    "type": "integer"
+                },
+                "loop": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "store.RunHealthRow": {
+            "type": "object",
+            "properties": {
+                "agent_name": {
+                    "type": "string"
+                },
+                "avg_cost_usd": {
+                    "type": "number"
+                },
+                "avg_tokens": {
+                    "type": "number"
+                },
+                "completed_runs": {
+                    "type": "integer"
+                },
+                "completion_rate": {
+                    "type": "number"
+                },
+                "loop_rate": {
+                    "type": "number"
+                },
+                "loop_runs": {
+                    "type": "integer"
+                },
+                "total_runs": {
+                    "type": "integer"
+                }
+            }
+        },
+        "store.ToolStat": {
+            "type": "object",
+            "properties": {
+                "call_count": {
+                    "type": "integer"
+                },
+                "fail_count": {
+                    "type": "integer"
+                },
+                "p95_latency_ms": {
+                    "type": "integer"
+                },
+                "success_count": {
+                    "type": "integer"
+                },
+                "success_rate": {
+                    "type": "number"
+                },
+                "tool_name": {
                     "type": "string"
                 }
             }

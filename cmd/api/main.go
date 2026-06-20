@@ -31,8 +31,9 @@ const version = "0.0.1"
 // @description				Format: "Bearer vgl_<token>"
 func main() {
 	cfg := config{
-		addr: env.GetString("ADDR", ":8080"),
-		env:  env.GetString("ENV", "development"),
+		addr:        env.GetString("ADDR", ":8080"),
+		env:         env.GetString("ENV", "development"),
+		corsOrigins: env.GetStringSlice("CORS_ALLOWED_ORIGINS", []string{"http://localhost:3000"}),
 		db: dbConfig{
 			addr:     env.GetString("DB_ADDR", "postgres://vigil:vigil@localhost:5432/vigil?sslmode=disable"),
 			maxConns: int32(env.GetInt("DB_MAX_CONNS", 30)),

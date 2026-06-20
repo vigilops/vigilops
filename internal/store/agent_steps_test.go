@@ -150,3 +150,68 @@ func TestAgentStepStore_ListByRun_returnsEmptySliceNotNil(t *testing.T) {
 	require.NotNil(t, steps)
 	assert.Len(t, steps, 0)
 }
+
+func TestAgentStepStore_ToolStats_aggregatesPerTool(t *testing.T) {
+	ctx := context.Background()
+	s := testStorage(t)
+	p := testProject(t, s, "toolstats")
+
+	run := &AgentRun{ProjectID: p.ID, AgentName: "a", Status: "running"}
+	require.NoError(t, s.AgentRuns.Insert(ctx, run))
+
+	// search: 3 calls, 2 ok / 1 fail, latencies 10/20/30
+	// fetch:  1 call, 1 ok, latency 100
+	steps := []*AgentStep{
+		{ToolName: new("search"), ToolSuccess: new(true), ToolLatencyMs: new(10)},
+		{ToolName: new("search"), ToolSuccess: new(true), ToolLatencyMs: new(20)},
+		{ToolName: new("search"), ToolSuccess: new(false), ToolLatencyMs: new(30)},
+		{ToolName: new("fetch"), ToolSuccess: new(true), ToolLatencyMs: new(100)},
+		// a think step with no tool_name must be excluded
+		{StepType: "think"},
+	}
+	for i, st := range steps {
+		st.ProjectID = p.ID
+		st.AgentRunID = run.ID
+		st.StepIndex = i + 1
+		if st.StepType == "" {
+			st.StepType = "tool_call"
+		}
+		require.NoError(t, s.AgentSteps.Insert(ctx, st))
+	}
+
+	from := run.Timestamp.Add(-time.Hour)
+	to := run.Timestamp.Add(time.Hour)
+	stats, err := s.AgentSteps.ToolStats(ctx, p.ID, from, to)
+	require.NoError(t, err)
+	require.Len(t, stats, 2)
+
+	byName := map[string]*ToolStat{}
+	for _, st := range stats {
+		byName[st.ToolName] = st
+	}
+
+	search := byName["search"]
+	require.NotNil(t, search)
+	assert.Equal(t, 3, search.CallCount)
+	assert.Equal(t, 2, search.SuccessCount)
+	assert.Equal(t, 1, search.FailCount)
+	assert.InDelta(t, 2.0/3.0, search.SuccessRate, 0.001)
+	assert.Equal(t, 30, search.P95LatencyMs)
+
+	fetch := byName["fetch"]
+	require.NotNil(t, fetch)
+	assert.Equal(t, 1, fetch.CallCount)
+	assert.Equal(t, 100, fetch.P95LatencyMs)
+}
+
+func TestAgentStepStore_ToolStats_returnsEmptySliceNotNil(t *testing.T) {
+	ctx := context.Background()
+	s := testStorage(t)
+	p := testProject(t, s, "toolstats-empty")
+
+	stats, err := s.AgentSteps.ToolStats(ctx, p.ID,
+		time.Now().Add(-time.Hour), time.Now().Add(time.Hour))
+	require.NoError(t, err)
+	require.NotNil(t, stats)
+	assert.Len(t, stats, 0)
+}

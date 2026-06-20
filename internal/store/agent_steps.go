@@ -150,3 +150,54 @@ func (s *AgentStepStore) CountFingerprint(ctx context.Context, runID uuid.UUID, 
 	}
 	return n, nil
 }
+
+type ToolStat struct {
+	ToolName     string  `json:"tool_name"`
+	CallCount    int     `json:"call_count"`
+	SuccessCount int     `json:"success_count"`
+	FailCount    int     `json:"fail_count"`
+	SuccessRate  float64 `json:"success_rate"`
+	P95LatencyMs int     `json:"p95_latency_ms"`
+}
+
+// ToolStats aggregates tool usage across every run in the project, scoped to a
+// time window. tool_success may be null; null counts toward neither success nor
+// failure but still counts as a call. p95 ignores null latencies.
+func (s *AgentStepStore) ToolStats(ctx context.Context, projectID uuid.UUID, from, to time.Time) ([]*ToolStat, error) {
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+	defer cancel()
+
+	const q = `
+		SELECT tool_name,
+		       count(*)::int                                              AS call_count,
+		       count(*) FILTER (WHERE tool_success IS TRUE)::int          AS success_count,
+		       count(*) FILTER (WHERE tool_success IS FALSE)::int         AS fail_count,
+		       coalesce(
+		           percentile_disc(0.95) WITHIN GROUP (ORDER BY tool_latency_ms), 0
+		       )::int                                                     AS p95_latency_ms
+		FROM agent_steps
+		WHERE project_id = $1
+		  AND tool_name IS NOT NULL
+		  AND timestamp >= $2 AND timestamp < $3
+		GROUP BY tool_name
+		ORDER BY call_count DESC
+	`
+	rows, err := s.pool.Query(ctx, q, projectID, from, to)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]*ToolStat, 0)
+	for rows.Next() {
+		ts := &ToolStat{}
+		if err := rows.Scan(&ts.ToolName, &ts.CallCount, &ts.SuccessCount, &ts.FailCount, &ts.P95LatencyMs); err != nil {
+			return nil, err
+		}
+		if ts.CallCount > 0 {
+			ts.SuccessRate = float64(ts.SuccessCount) / float64(ts.CallCount)
+		}
+		out = append(out, ts)
+	}
+	return out, rows.Err()
+}

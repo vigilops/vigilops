@@ -208,6 +208,53 @@ definitions:
       name:
         type: string
     type: object
+  store.RunBucket:
+    properties:
+      bucket:
+        type: string
+      completed:
+        type: integer
+      failed:
+        type: integer
+      loop:
+        type: integer
+      total:
+        type: integer
+    type: object
+  store.RunHealthRow:
+    properties:
+      agent_name:
+        type: string
+      avg_cost_usd:
+        type: number
+      avg_tokens:
+        type: number
+      completed_runs:
+        type: integer
+      completion_rate:
+        type: number
+      loop_rate:
+        type: number
+      loop_runs:
+        type: integer
+      total_runs:
+        type: integer
+    type: object
+  store.ToolStat:
+    properties:
+      call_count:
+        type: integer
+      fail_count:
+        type: integer
+      p95_latency_ms:
+        type: integer
+      success_count:
+        type: integer
+      success_rate:
+        type: number
+      tool_name:
+        type: string
+    type: object
 info:
   contact: {}
   description: Unified observability platform for AI agents, APIs, and infrastructure.
@@ -413,6 +460,42 @@ paths:
       summary: Creates an API key
       tags:
       - admin/keys
+  /agent/health:
+    get:
+      description: 'Rolls up run outcomes per agent_name: total runs, completion rate,
+        loop rate, avg cost, and avg tokens over the window.'
+      parameters:
+      - description: RFC3339, default now - 30d
+        in: query
+        name: from
+        type: string
+      - description: RFC3339, default now
+        in: query
+        name: to
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/store.RunHealthRow'
+            type: array
+        "400":
+          description: Bad Request
+          schema: {}
+        "401":
+          description: Unauthorized
+          schema: {}
+        "500":
+          description: Internal Server Error
+          schema: {}
+      security:
+      - ApiKeyAuth: []
+      summary: Per-agent run-health rollup for the calling project
+      tags:
+      - agent
   /agent/runs:
     get:
       parameters:
@@ -565,6 +648,82 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: List steps for an agent run, ordered by step_index asc
+      tags:
+      - agent
+  /agent/runs/timeseries:
+    get:
+      description: Returns per-bucket run outcome counts (total, completed, failed,
+        loop) via TimescaleDB time_bucket. bucket is one of 1h, 6h, 1d.
+      parameters:
+      - description: RFC3339, default now - 30d
+        in: query
+        name: from
+        type: string
+      - description: RFC3339, default now
+        in: query
+        name: to
+        type: string
+      - description: 'bucket size: 1h (default), 6h, 1d'
+        in: query
+        name: bucket
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/store.RunBucket'
+            type: array
+        "400":
+          description: Bad Request
+          schema: {}
+        "401":
+          description: Unauthorized
+          schema: {}
+        "500":
+          description: Internal Server Error
+          schema: {}
+      security:
+      - ApiKeyAuth: []
+      summary: Bucketed run counts over time for the calling project
+      tags:
+      - agent
+  /agent/tools/stats:
+    get:
+      description: 'Aggregates tool calls across every run in the window: call count,
+        success/fail counts, success rate, and p95 latency per tool.'
+      parameters:
+      - description: RFC3339, default now - 30d
+        in: query
+        name: from
+        type: string
+      - description: RFC3339, default now
+        in: query
+        name: to
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/store.ToolStat'
+            type: array
+        "400":
+          description: Bad Request
+          schema: {}
+        "401":
+          description: Unauthorized
+          schema: {}
+        "500":
+          description: Internal Server Error
+          schema: {}
+      security:
+      - ApiKeyAuth: []
+      summary: Per-tool usage analytics for the calling project
       tags:
       - agent
   /health:
