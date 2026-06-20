@@ -28,9 +28,12 @@ async function request<T>(
     }
   }
 
-  const res = await fetch(url, {
-    headers: { Accept: "application/json" },
-  })
+  const headers: Record<string, string> = { Accept: "application/json" }
+  if (env.VITE_VIGIL_API_KEY) {
+    headers["X-API-Key"] = env.VITE_VIGIL_API_KEY
+  }
+
+  const res = await fetch(url, { headers })
 
   if (!res.ok) {
     const body = (await res.json().catch(() => null)) as {

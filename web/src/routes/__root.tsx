@@ -11,7 +11,7 @@ import TanStackQueryDevtools from "@/integrations/tanstack-query/devtools"
 
 import appCss from "../styles.css?url"
 
-export interface RouterContext {
+interface RouterContext {
   queryClient: QueryClient
 }
 
@@ -38,8 +38,6 @@ export const Route = createRootRouteWithContext<RouterContext>()({
         rel: "icon",
         type: "image/png",
         href: "/logo.png",
-        bold: true,
-        imageSizes: "any",
       },
     ],
   }),

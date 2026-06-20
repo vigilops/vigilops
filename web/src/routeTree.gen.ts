@@ -9,38 +9,120 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as DashboardRouteRouteImport } from './routes/dashboard/route'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as DashboardIndexRouteImport } from './routes/dashboard/index'
+import { Route as DashboardToolsIndexRouteImport } from './routes/dashboard/tools/index'
+import { Route as DashboardRunsIndexRouteImport } from './routes/dashboard/runs/index'
+import { Route as DashboardAgentsIndexRouteImport } from './routes/dashboard/agents/index'
+import { Route as DashboardRunsRunIdRouteImport } from './routes/dashboard/runs/$runId'
 
+const DashboardRouteRoute = DashboardRouteRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DashboardIndexRoute = DashboardIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => DashboardRouteRoute,
+} as any)
+const DashboardToolsIndexRoute = DashboardToolsIndexRouteImport.update({
+  id: '/tools/',
+  path: '/tools/',
+  getParentRoute: () => DashboardRouteRoute,
+} as any)
+const DashboardRunsIndexRoute = DashboardRunsIndexRouteImport.update({
+  id: '/runs/',
+  path: '/runs/',
+  getParentRoute: () => DashboardRouteRoute,
+} as any)
+const DashboardAgentsIndexRoute = DashboardAgentsIndexRouteImport.update({
+  id: '/agents/',
+  path: '/agents/',
+  getParentRoute: () => DashboardRouteRoute,
+} as any)
+const DashboardRunsRunIdRoute = DashboardRunsRunIdRouteImport.update({
+  id: '/runs/$runId',
+  path: '/runs/$runId',
+  getParentRoute: () => DashboardRouteRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/dashboard': typeof DashboardRouteRouteWithChildren
+  '/dashboard/': typeof DashboardIndexRoute
+  '/dashboard/runs/$runId': typeof DashboardRunsRunIdRoute
+  '/dashboard/agents/': typeof DashboardAgentsIndexRoute
+  '/dashboard/runs/': typeof DashboardRunsIndexRoute
+  '/dashboard/tools/': typeof DashboardToolsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/dashboard': typeof DashboardIndexRoute
+  '/dashboard/runs/$runId': typeof DashboardRunsRunIdRoute
+  '/dashboard/agents': typeof DashboardAgentsIndexRoute
+  '/dashboard/runs': typeof DashboardRunsIndexRoute
+  '/dashboard/tools': typeof DashboardToolsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/dashboard': typeof DashboardRouteRouteWithChildren
+  '/dashboard/': typeof DashboardIndexRoute
+  '/dashboard/runs/$runId': typeof DashboardRunsRunIdRoute
+  '/dashboard/agents/': typeof DashboardAgentsIndexRoute
+  '/dashboard/runs/': typeof DashboardRunsIndexRoute
+  '/dashboard/tools/': typeof DashboardToolsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/dashboard'
+    | '/dashboard/'
+    | '/dashboard/runs/$runId'
+    | '/dashboard/agents/'
+    | '/dashboard/runs/'
+    | '/dashboard/tools/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/dashboard'
+    | '/dashboard/runs/$runId'
+    | '/dashboard/agents'
+    | '/dashboard/runs'
+    | '/dashboard/tools'
+  id:
+    | '__root__'
+    | '/'
+    | '/dashboard'
+    | '/dashboard/'
+    | '/dashboard/runs/$runId'
+    | '/dashboard/agents/'
+    | '/dashboard/runs/'
+    | '/dashboard/tools/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  DashboardRouteRoute: typeof DashboardRouteRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/dashboard': {
+      id: '/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof DashboardRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -48,11 +130,67 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/dashboard/': {
+      id: '/dashboard/'
+      path: '/'
+      fullPath: '/dashboard/'
+      preLoaderRoute: typeof DashboardIndexRouteImport
+      parentRoute: typeof DashboardRouteRoute
+    }
+    '/dashboard/tools/': {
+      id: '/dashboard/tools/'
+      path: '/tools'
+      fullPath: '/dashboard/tools/'
+      preLoaderRoute: typeof DashboardToolsIndexRouteImport
+      parentRoute: typeof DashboardRouteRoute
+    }
+    '/dashboard/runs/': {
+      id: '/dashboard/runs/'
+      path: '/runs'
+      fullPath: '/dashboard/runs/'
+      preLoaderRoute: typeof DashboardRunsIndexRouteImport
+      parentRoute: typeof DashboardRouteRoute
+    }
+    '/dashboard/agents/': {
+      id: '/dashboard/agents/'
+      path: '/agents'
+      fullPath: '/dashboard/agents/'
+      preLoaderRoute: typeof DashboardAgentsIndexRouteImport
+      parentRoute: typeof DashboardRouteRoute
+    }
+    '/dashboard/runs/$runId': {
+      id: '/dashboard/runs/$runId'
+      path: '/runs/$runId'
+      fullPath: '/dashboard/runs/$runId'
+      preLoaderRoute: typeof DashboardRunsRunIdRouteImport
+      parentRoute: typeof DashboardRouteRoute
+    }
   }
 }
 
+interface DashboardRouteRouteChildren {
+  DashboardIndexRoute: typeof DashboardIndexRoute
+  DashboardRunsRunIdRoute: typeof DashboardRunsRunIdRoute
+  DashboardAgentsIndexRoute: typeof DashboardAgentsIndexRoute
+  DashboardRunsIndexRoute: typeof DashboardRunsIndexRoute
+  DashboardToolsIndexRoute: typeof DashboardToolsIndexRoute
+}
+
+const DashboardRouteRouteChildren: DashboardRouteRouteChildren = {
+  DashboardIndexRoute: DashboardIndexRoute,
+  DashboardRunsRunIdRoute: DashboardRunsRunIdRoute,
+  DashboardAgentsIndexRoute: DashboardAgentsIndexRoute,
+  DashboardRunsIndexRoute: DashboardRunsIndexRoute,
+  DashboardToolsIndexRoute: DashboardToolsIndexRoute,
+}
+
+const DashboardRouteRouteWithChildren = DashboardRouteRoute._addFileChildren(
+  DashboardRouteRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  DashboardRouteRoute: DashboardRouteRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
