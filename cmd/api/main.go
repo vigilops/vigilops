@@ -35,7 +35,7 @@ func main() {
 		env:         env.GetString("ENV", "development"),
 		corsOrigins: env.GetStringSlice("CORS_ALLOWED_ORIGINS", []string{"http://localhost:3000"}),
 		db: dbConfig{
-			addr:     env.GetString("DB_ADDR", "postgres://vigil:vigil@localhost:5432/vigil?sslmode=disable"),
+			addr:     env.GetString("DB_ADDR", "postgres://keelwave:keelwave@localhost:5432/keelwave?sslmode=disable"),
 			maxConns: int32(env.GetInt("DB_MAX_CONNS", 30)),
 		},
 		rateLimit: rateLimitConfig{
