@@ -1,43 +1,45 @@
-import {  Moon, Sun } from "lucide-react"
+import { Monitor, Moon, Sun } from "lucide-react"
+
 import { useTheme } from "@/components/theme-provider"
 import { cn } from "@/lib/utils"
 
-const CYCLE = ["light", "dark"] as const
-type Theme = (typeof CYCLE)[number]
-
-const ICONS: Record<Theme, React.ReactNode> = {
-  light:  <Sun  className="size-3.5" />,
-  dark:   <Moon className="size-3.5" />,
-}
-
-const LABELS: Record<Theme, string> = {
-  light: "Light",
-  dark: "Dark",
-}
+const OPTIONS = [
+  { value: "system", icon: Monitor, label: "System" },
+  { value: "light", icon: Sun, label: "Light" },
+  { value: "dark", icon: Moon, label: "Dark" },
+] as const
 
 export function ModeToggle({ className }: { className?: string }) {
   const { theme, setTheme } = useTheme()
 
-  const current: Theme = (CYCLE.includes(theme as Theme) ? theme : "system") as Theme
-
-  function cycle() {
-    const next = CYCLE[(CYCLE.indexOf(current) + 1) % CYCLE.length]
-    setTheme(next)
-  }
-
   return (
-    <button
-      onClick={cycle}
-      title={`Theme: ${LABELS[current]} (click to cycle)`}
+    <div
       className={cn(
-        "flex items-center gap-1.5 px-2.5 py-1.5 border border-border",
-        "text-muted-foreground hover:text-foreground hover:border-foreground/30",
-        "transition-all text-[10px] font-mono tracking-wide",
-        className
+        "inline-flex items-center gap-0.5 rounded-full border border-border bg-muted/40 p-0.5",
+        className,
       )}
     >
-      {ICONS[current]}
-      <span className="hidden sm:inline">{LABELS[current]}</span>
-    </button>
+      {OPTIONS.map(({ value, icon: Icon, label }) => {
+        const active = theme === value
+        return (
+          <button
+            key={value}
+            type="button"
+            onClick={() => setTheme(value)}
+            title={label}
+            aria-label={label}
+            aria-pressed={active}
+            className={cn(
+              "flex size-7 items-center justify-center rounded-full transition-colors",
+              active
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <Icon className="size-3.5" />
+          </button>
+        )
+      })}
+    </div>
   )
 }
