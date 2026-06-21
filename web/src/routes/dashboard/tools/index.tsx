@@ -13,6 +13,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { formatPercent, formatTokens } from "@/lib/format"
+import { useTimeWindow } from "@/context/time-window"
 import { useToolStats } from "@/features/agent-tools/hooks/use-agent-tools"
 
 export const Route = createFileRoute("/dashboard/tools/")({
@@ -20,7 +21,8 @@ export const Route = createFileRoute("/dashboard/tools/")({
 })
 
 function ToolsPage() {
-  const tools = useToolStats()
+  const { from } = useTimeWindow()
+  const tools = useToolStats(from)
 
   return (
     <div className="flex flex-col gap-6">
@@ -60,7 +62,7 @@ function ToolsPage() {
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
-                      <Progress value={t.success_rate * 100} className="h-1.5" />
+                      <Progress value={t.success_rate * 100} className="h-1.5 flex-1" />
                       <span className="w-12 shrink-0 text-right font-mono text-xs text-muted-foreground">
                         {formatPercent(t.success_rate)}
                       </span>

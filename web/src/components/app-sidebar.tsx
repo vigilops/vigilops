@@ -1,5 +1,7 @@
 import { Link, useRouterState } from "@tanstack/react-router"
-import { Activity, Bot, ListTree, Wrench } from "lucide-react"
+import { Bot, LayoutDashboard, ListTree, Wrench } from "lucide-react"
+
+import { Brand } from "@/components/brand"
 
 import {
   Sidebar,
@@ -14,6 +16,7 @@ import {
 } from "@/components/ui/sidebar"
 
 const NAV = [
+  { title: "Overview", to: "/dashboard", icon: LayoutDashboard },
   { title: "Agents", to: "/dashboard/agents", icon: Bot },
   { title: "Agent runs", to: "/dashboard/runs", icon: ListTree },
   { title: "Tool analytics", to: "/dashboard/tools", icon: Wrench },
@@ -24,13 +27,8 @@ export function AppSidebar() {
 
   return (
     <Sidebar>
-      <SidebarHeader>
-        <Link to="/" className="flex items-center gap-2 px-2 py-1.5">
-          <span className="flex size-6 items-center justify-center rounded-md bg-primary text-primary-foreground">
-            <Activity className="size-3.5" />
-          </span>
-          <span className="font-semibold">keelwave</span>
-        </Link>
+      <SidebarHeader className="h-14 justify-center border-b px-4">
+        <Brand />
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
@@ -40,7 +38,7 @@ export function AppSidebar() {
               {NAV.map((item) => (
                 <SidebarMenuItem key={item.to}>
                   <SidebarMenuButton
-                    isActive={pathname.startsWith(item.to)}
+                    isActive={item.to === "/dashboard" ? pathname === item.to : pathname.startsWith(item.to)}
                     tooltip={item.title}
                     render={<Link to={item.to} />}
                   >

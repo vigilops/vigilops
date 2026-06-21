@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router"
 import { EmptyState } from "@/components/empty-state"
 import { ErrorState } from "@/components/error-state"
 import { TableSkeleton } from "@/components/table-skeleton"
+import { useTimeWindow } from "@/context/time-window"
 import { RunHealthTable } from "@/features/agent-runs/components/run-health-table"
 import { useRunHealth } from "@/features/agent-runs/hooks/use-agent-runs"
 
@@ -11,7 +12,8 @@ export const Route = createFileRoute("/dashboard/agents/")({
 })
 
 function AgentsPage() {
-  const health = useRunHealth()
+  const { from } = useTimeWindow()
+  const health = useRunHealth(from)
 
   return (
     <div className="flex flex-col gap-6">

@@ -25,8 +25,6 @@ const chartConfig = {
   loop: { label: "Loop", color: "#f59e0b" },
 } satisfies ChartConfig
 
-// Axis ticks: 1h spans one day → time only; 6h spans a week → date + hour
-// (otherwise "08:00" repeats across days); 1d → date only.
 function formatTick(iso: string, bucket: BucketSize): string {
   const d = new Date(iso)
   if (bucket === "1h") {
@@ -42,7 +40,6 @@ function formatTick(iso: string, bucket: BucketSize): string {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
 }
 
-// Tooltip: always full date + time, no raw ISO.
 function formatLabel(iso: string): string {
   return new Date(iso).toLocaleString("en-US", {
     month: "short",
@@ -56,7 +53,7 @@ export function RunsChart({
   from,
   bucket = "1h",
 }: {
-  from: string
+  from: string | null
   bucket?: BucketSize
 }) {
   const series = useRunsTimeseries(from, bucket)

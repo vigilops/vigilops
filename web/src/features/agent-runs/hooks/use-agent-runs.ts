@@ -9,12 +9,14 @@ import type {
   RunHealthRow,
 } from "@/features/agent-runs/types"
 
+export { useToolStats } from "@/features/agent-tools/hooks/use-agent-tools"
+
 export type BucketSize = "1h" | "6h" | "1d"
 
 const STALE_TIME = 1000 * 30 // 30s — telemetry is append-heavy, keep it fresh
 
 export interface ListRunsParams {
-  from?: string
+  from?: string | null
   to?: string
   limit?: number
   offset?: number
@@ -26,8 +28,8 @@ export const agentRunKeys = {
   detail: (id: string) => ["agent-runs", "detail", id] as const,
   steps: (id: string) => ["agent-runs", "steps", id] as const,
   loops: (id: string) => ["agent-runs", "loops", id] as const,
-  health: ["agent-runs", "health"] as const,
-  timeseries: (from: string, bucket: BucketSize) =>
+  health: (from: string | null) => ["agent-runs", "health", from] as const,
+  timeseries: (from: string | null, bucket: BucketSize) =>
     ["agent-runs", "timeseries", from, bucket] as const,
 }
 
@@ -35,6 +37,7 @@ export function useAgentRuns(params?: ListRunsParams) {
   return useQuery({
     queryKey: agentRunKeys.list(params),
     queryFn: () => apiClient.get<AgentRun[]>("/v1/agent/runs", { ...params }),
+    enabled: params?.from != null,
     staleTime: STALE_TIME,
   })
 }
@@ -66,19 +69,28 @@ export function useAgentLoops(id: string) {
   })
 }
 
-export function useRunsTimeseries(from: string, bucket: BucketSize = "1h") {
+export function useRunsTimeseries(
+  from: string | null,
+  bucket: BucketSize = "1h",
+) {
   return useQuery({
     queryKey: agentRunKeys.timeseries(from, bucket),
     queryFn: () =>
-      apiClient.get<RunBucket[]>("/v1/agent/runs/timeseries", { from, bucket }),
+      apiClient.get<RunBucket[]>("/v1/agent/runs/timeseries", {
+        from: from!,
+        bucket,
+      }),
+    enabled: from != null,
     staleTime: STALE_TIME,
   })
 }
 
-export function useRunHealth() {
+export function useRunHealth(from: string | null) {
   return useQuery({
-    queryKey: agentRunKeys.health,
-    queryFn: () => apiClient.get<RunHealthRow[]>("/v1/agent/health"),
+    queryKey: agentRunKeys.health(from),
+    queryFn: () =>
+      apiClient.get<RunHealthRow[]>("/v1/agent/health", { from: from! }),
+    enabled: from != null,
     staleTime: STALE_TIME,
   })
 }

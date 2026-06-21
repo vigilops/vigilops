@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 import { Link, createFileRoute } from "@tanstack/react-router"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 
@@ -6,13 +6,6 @@ import { EmptyState } from "@/components/empty-state"
 import { ErrorState } from "@/components/error-state"
 import { TableSkeleton } from "@/components/table-skeleton"
 import { Button } from "@/components/ui/button"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   Table,
@@ -27,15 +20,13 @@ import { MetricCard } from "@/features/agent-runs/components/metric-card"
 import { RunsChart } from "@/features/agent-runs/components/runs-chart"
 import { RunStatusBadge } from "@/features/agent-runs/components/run-status-badge"
 import {
-  TIME_WINDOWS,
   formatCost,
   formatDuration,
   formatPercent,
   formatTokens,
   shortId,
-  windowFrom,
 } from "@/lib/format"
-import type { TimeWindow } from "@/lib/format"
+import { useTimeWindow } from "@/context/time-window"
 import {
   useAgentRuns,
   useRunHealth,
@@ -65,47 +56,28 @@ function aggregate(rows: RunHealthRow[]) {
 }
 
 function RunsPage() {
-  const [window, setWindow] = useState<TimeWindow>("30d")
+  const { from, bucket } = useTimeWindow()
   const [page, setPage] = useState(0)
 
-  const from = useMemo(() => windowFrom(window), [window])
+  // Reset to first page when the global window changes.
+  useEffect(() => setPage(0), [from])
+
   const runs = useAgentRuns({
     from,
     limit: PAGE_SIZE,
     offset: page * PAGE_SIZE,
   })
-  const health = useRunHealth()
+  const health = useRunHealth(from)
 
-  const onWindowChange = (w: TimeWindow | null) => {
-    if (!w) return
-    setWindow(w)
-    setPage(0)
-  }
-
-  const bucket = window === "24h" ? "1h" : window === "7d" ? "6h" : "1d"
   const hasNext = (runs.data?.length ?? 0) === PAGE_SIZE
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="flex flex-col gap-1">
-          <h1 className="text-xl font-semibold tracking-tight">Agent runs</h1>
-          <p className="text-sm text-muted-foreground">
-            Every agent invocation, newest first.
-          </p>
-        </div>
-        <Select value={window} onValueChange={onWindowChange}>
-          <SelectTrigger className="w-[160px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {TIME_WINDOWS.map((w) => (
-              <SelectItem key={w.value} value={w.value}>
-                {w.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <div className="flex flex-col gap-1">
+        <h1 className="text-xl font-semibold tracking-tight">Agent runs</h1>
+        <p className="text-sm text-muted-foreground">
+          Every agent invocation, newest first.
+        </p>
       </div>
 
       <MetricCards health={health} />

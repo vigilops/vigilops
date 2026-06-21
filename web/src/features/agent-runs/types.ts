@@ -69,4 +69,5 @@ export interface RunHealthRow {
   loop_rate: number
   avg_cost_usd?: number
   avg_tokens: number
+  prev_total_runs?: number
 }
