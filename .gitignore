@@ -8,8 +8,13 @@
 .vscode/
 .DS_Store
 
+# Compiled binaries from `go build ./cmd/...` without -o
+/seeddemo
+
 # Ignore node_modules
 node_modules/
 
 # Local-only Claude context
 CLAUDE.private.md
+
+docs/superpowers/
