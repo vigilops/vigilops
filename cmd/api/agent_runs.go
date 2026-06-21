@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/keelwave/keelwave/internal/store"
+	"golang.org/x/sync/errgroup"
 )
 
 type ingestAgentRunStartPayload struct {
@@ -233,6 +234,78 @@ func (app *application) runHealthHandler(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	rows, err := app.store.AgentRuns.RunHealth(r.Context(), projectID, params.From, params.To)
+	if err != nil {
+		app.internalServerError(w, r, err)
+		return
+	}
+
+	if err := app.jsonResponse(w, http.StatusOK, rows); err != nil {
+		app.internalServerError(w, r, err)
+	}
+}
+
+// Summary godoc
+//
+//	@Summary	Run summary + duration percentiles for the calling project, current vs previous window
+//	@Tags		agent
+//	@Produce	json
+//	@Param		from	query		string	false	"RFC3339, default now - 30d"
+//	@Param		to		query		string	false	"RFC3339, default now"
+//	@Success	200		{object}	map[string]store.RunSummary
+//	@Security	ApiKeyAuth
+//	@Router		/agent/summary [get]
+func (app *application) summaryHandler(w http.ResponseWriter, r *http.Request) {
+	projectID := projectIDFromContext(r.Context())
+	params, err := parseListParams(r)
+	if err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+	// The run rollup (agent_runs) and step-derived counts (agent_steps) hit
+	// different tables, so fetch them concurrently.
+	var cur, prev *store.RunSummary
+	var curSteps, prevSteps *store.StepCounts
+	g, gctx := errgroup.WithContext(r.Context())
+	g.Go(func() error {
+		var err error
+		cur, prev, err = app.store.AgentRuns.SummaryWithPrev(gctx, projectID, params.From, params.To)
+		return err
+	})
+	g.Go(func() error {
+		var err error
+		curSteps, prevSteps, err = app.store.AgentSteps.StepCountsWithPrev(gctx, projectID, params.From, params.To)
+		return err
+	})
+	if err := g.Wait(); err != nil {
+		app.internalServerError(w, r, err)
+		return
+	}
+	cur.TotalToolCalls, cur.UniqueTools = curSteps.TotalToolCalls, curSteps.UniqueTools
+	prev.TotalToolCalls, prev.UniqueTools = prevSteps.TotalToolCalls, prevSteps.UniqueTools
+
+	if err := app.jsonResponse(w, http.StatusOK, map[string]*store.RunSummary{"current": cur, "previous": prev}); err != nil {
+		app.internalServerError(w, r, err)
+	}
+}
+
+// TerminationCounts godoc
+//
+//	@Summary	Run counts grouped by termination reason
+//	@Tags		agent
+//	@Produce	json
+//	@Param		from	query	string	false	"RFC3339, default now - 30d"
+//	@Param		to		query	string	false	"RFC3339, default now"
+//	@Success	200		{array}	store.TerminationCount
+//	@Security	ApiKeyAuth
+//	@Router		/agent/runs/terminations [get]
+func (app *application) terminationsHandler(w http.ResponseWriter, r *http.Request) {
+	projectID := projectIDFromContext(r.Context())
+	params, err := parseListParams(r)
+	if err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+	rows, err := app.store.AgentRuns.TerminationCounts(r.Context(), projectID, params.From, params.To)
 	if err != nil {
 		app.internalServerError(w, r, err)
 		return

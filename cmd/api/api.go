@@ -89,10 +89,13 @@ func (app *application) mount() *chi.Mux {
 			r.Use(app.apiKeyAuth)
 			r.Get("/health", app.runHealthHandler)
 			r.Get("/tools/stats", app.toolStatsHandler)
+			r.Get("/summary", app.summaryHandler)
+			r.Get("/steps/distribution", app.stepDistributionHandler)
 
 			r.Route("/runs", func(r chi.Router) {
 				r.Get("/", app.listAgentRunsHandler)
 				r.Get("/timeseries", app.runsTimeseriesHandler)
+				r.Get("/terminations", app.terminationsHandler)
 				r.Get("/{runID}", app.getAgentRunHandler)
 				r.Get("/{runID}/steps", app.listAgentStepsHandler)
 				r.Get("/{runID}/loops", app.listAgentLoopsHandler)

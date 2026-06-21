@@ -237,8 +237,55 @@ definitions:
         type: number
       loop_runs:
         type: integer
+      prev_total_runs:
+        type: integer
       total_runs:
         type: integer
+    type: object
+  store.RunSummary:
+    properties:
+      avg_cost_usd:
+        type: number
+      avg_tokens:
+        type: number
+      completed_runs:
+        type: integer
+      completion_rate:
+        type: number
+      duration_p50_ms:
+        type: integer
+      duration_p95_ms:
+        type: integer
+      duration_p99_ms:
+        type: integer
+      loop_rate:
+        type: number
+      loop_runs:
+        type: integer
+      total_runs:
+        type: integer
+      total_steps:
+        type: integer
+      total_tool_calls:
+        type: integer
+      unique_agents:
+        type: integer
+      unique_tools:
+        type: integer
+    type: object
+  store.StepTypeCount:
+    properties:
+      count:
+        type: integer
+      step_type:
+        type: string
+    type: object
+  store.TerminationCount:
+    properties:
+      count:
+        type: integer
+      termination_reason:
+        type: string
     type: object
   store.ToolStat:
     properties:
@@ -246,7 +293,15 @@ definitions:
         type: integer
       fail_count:
         type: integer
+      is_new:
+        type: boolean
+      p50_latency_ms:
+        type: integer
       p95_latency_ms:
+        type: integer
+      p99_latency_ms:
+        type: integer
+      prev_call_count:
         type: integer
       success_count:
         type: integer
@@ -650,6 +705,31 @@ paths:
       summary: List steps for an agent run, ordered by step_index asc
       tags:
       - agent
+  /agent/runs/terminations:
+    get:
+      parameters:
+      - description: RFC3339, default now - 30d
+        in: query
+        name: from
+        type: string
+      - description: RFC3339, default now
+        in: query
+        name: to
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/store.TerminationCount'
+            type: array
+      security:
+      - ApiKeyAuth: []
+      summary: Run counts grouped by termination reason
+      tags:
+      - agent
   /agent/runs/timeseries:
     get:
       description: Returns per-bucket run outcome counts (total, completed, failed,
@@ -688,6 +768,57 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: Bucketed run counts over time for the calling project
+      tags:
+      - agent
+  /agent/steps/distribution:
+    get:
+      parameters:
+      - description: RFC3339, default now - 30d
+        in: query
+        name: from
+        type: string
+      - description: RFC3339, default now
+        in: query
+        name: to
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/store.StepTypeCount'
+            type: array
+      security:
+      - ApiKeyAuth: []
+      summary: Step counts grouped by step_type
+      tags:
+      - agent
+  /agent/summary:
+    get:
+      parameters:
+      - description: RFC3339, default now - 30d
+        in: query
+        name: from
+        type: string
+      - description: RFC3339, default now
+        in: query
+        name: to
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              $ref: '#/definitions/store.RunSummary'
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Run summary + duration percentiles for the calling project, current
+        vs previous window
       tags:
       - agent
   /agent/tools/stats:

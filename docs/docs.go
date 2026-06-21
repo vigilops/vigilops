@@ -422,6 +422,47 @@ const docTemplate = `{
                 }
             }
         },
+        "/agent/runs/terminations": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "agent"
+                ],
+                "summary": "Run counts grouped by termination reason",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "RFC3339, default now - 30d",
+                        "name": "from",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "RFC3339, default now",
+                        "name": "to",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/store.TerminationCount"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/agent/runs/timeseries": {
             "get": {
                 "security": [
@@ -648,6 +689,88 @@ const docTemplate = `{
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {}
+                    }
+                }
+            }
+        },
+        "/agent/steps/distribution": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "agent"
+                ],
+                "summary": "Step counts grouped by step_type",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "RFC3339, default now - 30d",
+                        "name": "from",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "RFC3339, default now",
+                        "name": "to",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/store.StepTypeCount"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/agent/summary": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "agent"
+                ],
+                "summary": "Run summary + duration percentiles for the calling project, current vs previous window",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "RFC3339, default now - 30d",
+                        "name": "from",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "RFC3339, default now",
+                        "name": "to",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "$ref": "#/definitions/store.RunSummary"
+                            }
+                        }
                     }
                 }
             }
@@ -1400,8 +1523,80 @@ const docTemplate = `{
                 "loop_runs": {
                     "type": "integer"
                 },
+                "prev_total_runs": {
+                    "type": "integer"
+                },
                 "total_runs": {
                     "type": "integer"
+                }
+            }
+        },
+        "store.RunSummary": {
+            "type": "object",
+            "properties": {
+                "avg_cost_usd": {
+                    "type": "number"
+                },
+                "avg_tokens": {
+                    "type": "number"
+                },
+                "completed_runs": {
+                    "type": "integer"
+                },
+                "completion_rate": {
+                    "type": "number"
+                },
+                "duration_p50_ms": {
+                    "type": "integer"
+                },
+                "duration_p95_ms": {
+                    "type": "integer"
+                },
+                "duration_p99_ms": {
+                    "type": "integer"
+                },
+                "loop_rate": {
+                    "type": "number"
+                },
+                "loop_runs": {
+                    "type": "integer"
+                },
+                "total_runs": {
+                    "type": "integer"
+                },
+                "total_steps": {
+                    "type": "integer"
+                },
+                "total_tool_calls": {
+                    "type": "integer"
+                },
+                "unique_agents": {
+                    "type": "integer"
+                },
+                "unique_tools": {
+                    "type": "integer"
+                }
+            }
+        },
+        "store.StepTypeCount": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "step_type": {
+                    "type": "string"
+                }
+            }
+        },
+        "store.TerminationCount": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "termination_reason": {
+                    "type": "string"
                 }
             }
         },
@@ -1414,7 +1609,19 @@ const docTemplate = `{
                 "fail_count": {
                     "type": "integer"
                 },
+                "is_new": {
+                    "type": "boolean"
+                },
+                "p50_latency_ms": {
+                    "type": "integer"
+                },
                 "p95_latency_ms": {
+                    "type": "integer"
+                },
+                "p99_latency_ms": {
+                    "type": "integer"
+                },
+                "prev_call_count": {
                     "type": "integer"
                 },
                 "success_count": {

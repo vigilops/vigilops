@@ -197,11 +197,129 @@ func TestAgentStepStore_ToolStats_aggregatesPerTool(t *testing.T) {
 	assert.Equal(t, 1, search.FailCount)
 	assert.InDelta(t, 2.0/3.0, search.SuccessRate, 0.001)
 	assert.Equal(t, 30, search.P95LatencyMs)
+	assert.Equal(t, 20, search.P50LatencyMs) // percentile_disc(0.50) of {10,20,30} = 20 (middle value)
+	assert.Equal(t, 30, search.P99LatencyMs)
 
 	fetch := byName["fetch"]
 	require.NotNil(t, fetch)
 	assert.Equal(t, 1, fetch.CallCount)
 	assert.Equal(t, 100, fetch.P95LatencyMs)
+
+	assert.Equal(t, 0, search.PrevCallCount) // nothing in the prior window
+	assert.Equal(t, 0, fetch.PrevCallCount)
+}
+
+func TestAgentStepStore_ToolStats_trendCountsPriorWindow(t *testing.T) {
+	ctx := context.Background()
+	s := testStorage(t)
+	p := testProject(t, s, "toolstats-trend")
+	run := &AgentRun{ProjectID: p.ID, AgentName: "a", Status: "running"}
+	require.NoError(t, s.AgentRuns.Insert(ctx, run))
+
+	now := time.Now()
+	idx := 0
+	mk := func(tool string, ts time.Time) {
+		idx++
+		require.NoError(t, s.AgentSteps.Insert(ctx, &AgentStep{
+			ProjectID: p.ID, AgentRunID: run.ID, StepIndex: idx,
+			StepType: "tool_call", ToolName: new(tool), Timestamp: ts,
+		}))
+	}
+
+	from := now.Add(-1 * time.Hour)
+	to := now.Add(1 * time.Hour)
+	// prevFrom = now-3h; prior window is [now-3h, now-1h).
+
+	// search: 3 current, 2 prior → growing, has history → not new.
+	mk("search", now)
+	mk("search", now)
+	mk("search", now)
+	mk("search", now.Add(-2*time.Hour))
+	mk("search", now.Add(-2*time.Hour))
+	// fetch: prior only → excluded (no current calls).
+	mk("fetch", now.Add(-2*time.Hour))
+	// debugger: current only, no history before `from` → truly new.
+	mk("debugger", now)
+
+	stats, err := s.AgentSteps.ToolStats(ctx, p.ID, from, to)
+	require.NoError(t, err)
+	require.Len(t, stats, 2) // fetch dropped by HAVING; search + debugger remain
+
+	byName := map[string]*ToolStat{}
+	for _, st := range stats {
+		byName[st.ToolName] = st
+	}
+
+	search := byName["search"]
+	require.NotNil(t, search)
+	assert.Equal(t, 3, search.CallCount)
+	assert.Equal(t, 2, search.PrevCallCount)
+	assert.False(t, search.IsNew) // existed in the prior window
+
+	debugger := byName["debugger"]
+	require.NotNil(t, debugger)
+	assert.Equal(t, 1, debugger.CallCount)
+	assert.Equal(t, 0, debugger.PrevCallCount)
+	assert.True(t, debugger.IsNew) // first-ever call is in this window
+}
+
+func TestAgentStepStore_StepTypeDistribution_groupsByType(t *testing.T) {
+	ctx := context.Background()
+	s := testStorage(t)
+	p := testProject(t, s, "stepdist")
+	run := &AgentRun{ProjectID: p.ID, AgentName: "a", Status: "running"}
+	require.NoError(t, s.AgentRuns.Insert(ctx, run))
+	for i, kind := range []string{"think", "tool_call", "tool_call", "tool_result"} {
+		require.NoError(t, s.AgentSteps.Insert(ctx, &AgentStep{
+			ProjectID: p.ID, AgentRunID: run.ID, StepIndex: i + 1, StepType: kind,
+		}))
+	}
+	from := run.Timestamp.Add(-time.Hour)
+	to := run.Timestamp.Add(time.Hour)
+	dist, err := s.AgentSteps.StepTypeDistribution(ctx, p.ID, from, to)
+	require.NoError(t, err)
+	m := map[string]int{}
+	for _, d := range dist {
+		m[d.StepType] = d.Count
+	}
+	assert.Equal(t, 2, m["tool_call"])
+	assert.Equal(t, 1, m["think"])
+	assert.Equal(t, 1, m["tool_result"])
+}
+
+func TestAgentStepStore_StepCountsWithPrev_countsCallsAndUniqueTools(t *testing.T) {
+	ctx := context.Background()
+	s := testStorage(t)
+	p := testProject(t, s, "stepcounts")
+	run := &AgentRun{ProjectID: p.ID, AgentName: "a", Status: "running"}
+	require.NoError(t, s.AgentRuns.Insert(ctx, run))
+
+	now := run.Timestamp
+	mk := func(tool string, ts time.Time) {
+		toolCopy := tool
+		require.NoError(t, s.AgentSteps.Insert(ctx, &AgentStep{
+			ProjectID: p.ID, AgentRunID: run.ID, StepIndex: 0,
+			StepType: "tool_call", ToolName: &toolCopy, Timestamp: ts,
+		}))
+	}
+
+	from := now.Add(-1 * time.Hour)
+	to := now.Add(1 * time.Hour)
+	// prevFrom = now-3h; prior window is [now-3h, now-1h).
+
+	// Current window: 3 calls, 2 unique tools.
+	mk("search", now)
+	mk("search", now)
+	mk("read_file", now)
+	// Prior window: 1 call, 1 unique tool.
+	mk("write_file", now.Add(-2*time.Hour))
+
+	cur, prev, err := s.AgentSteps.StepCountsWithPrev(ctx, p.ID, from, to)
+	require.NoError(t, err)
+	assert.Equal(t, 3, cur.TotalToolCalls)
+	assert.Equal(t, 2, cur.UniqueTools)
+	assert.Equal(t, 1, prev.TotalToolCalls)
+	assert.Equal(t, 1, prev.UniqueTools)
 }
 
 func TestAgentStepStore_ToolStats_returnsEmptySliceNotNil(t *testing.T) {

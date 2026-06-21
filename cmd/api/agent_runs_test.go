@@ -138,3 +138,43 @@ func TestRunsTimeseriesHandler_returns401WithoutKey(t *testing.T) {
 	resp, _ := doJSON(t, http.MethodGet, srv.URL+"/v1/agent/runs/timeseries", "", nil, nil)
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 }
+
+func TestSummaryHandler_returnsCurrentAndPrevious(t *testing.T) {
+	srv, projectID, key, app := newTestServer(t)
+	ctx := context.Background()
+	pid := uuid.MustParse(projectID)
+	run := &store.AgentRun{ProjectID: pid, AgentName: "a", Status: "running"}
+	require.NoError(t, app.store.AgentRuns.Insert(ctx, run))
+	require.NoError(t, app.store.AgentRuns.Finish(ctx, run.ID, run.Timestamp, store.AgentRunFinish{
+		Status: "completed", TotalTokens: 1000, DurationMs: new(150),
+	}))
+	var body struct {
+		Data struct {
+			Current  store.RunSummary `json:"current"`
+			Previous store.RunSummary `json:"previous"`
+		} `json:"data"`
+	}
+	resp, raw := doJSON(t, http.MethodGet, srv.URL+"/v1/agent/summary", key, nil, &body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "body=%s", raw)
+	assert.GreaterOrEqual(t, body.Data.Current.TotalRuns, 1)
+}
+
+func TestSummaryHandler_401WithoutKey(t *testing.T) {
+	srv, _, _, _ := newTestServer(t)
+	resp, _ := doJSON(t, http.MethodGet, srv.URL+"/v1/agent/summary", "", nil, nil)
+	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+}
+
+func TestTerminationsHandler_returns200(t *testing.T) {
+	srv, projectID, key, app := newTestServer(t)
+	ctx := context.Background()
+	run := &store.AgentRun{ProjectID: uuid.MustParse(projectID), AgentName: "a", Status: "running"}
+	require.NoError(t, app.store.AgentRuns.Insert(ctx, run))
+	require.NoError(t, app.store.AgentRuns.Finish(ctx, run.ID, run.Timestamp, store.AgentRunFinish{
+		Status: "completed", TerminationReason: new("clean"),
+	}))
+	var body struct{ Data []store.TerminationCount `json:"data"` }
+	resp, raw := doJSON(t, http.MethodGet, srv.URL+"/v1/agent/runs/terminations", key, nil, &body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "body=%s", raw)
+	require.NotEmpty(t, body.Data)
+}

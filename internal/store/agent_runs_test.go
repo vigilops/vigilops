@@ -194,10 +194,47 @@ func TestAgentRunStore_RunHealth_rollsUpPerAgentName(t *testing.T) {
 	assert.InDelta(t, 0.04, *ra.AvgCostUSD, 0.001)
 	assert.InDelta(t, 2000.0, ra.AvgTokens, 0.001)
 
+	assert.Equal(t, 0, ra.PrevTotalRuns) // no runs in the prior window
+
 	tr := byName["triage"]
 	require.NotNil(t, tr)
 	assert.Equal(t, 1, tr.TotalRuns)
 	assert.InDelta(t, 1.0, tr.CompletionRate, 0.001)
+}
+
+func TestAgentRunStore_RunHealth_countsPriorWindow(t *testing.T) {
+	ctx := context.Background()
+	s := testStorage(t)
+	p := testProject(t, s, "runhealth-prev")
+
+	now := time.Now()
+	mk := func(name string, ts time.Time) {
+		run := &AgentRun{ProjectID: p.ID, AgentName: name, Status: "running", Timestamp: ts}
+		require.NoError(t, s.AgentRuns.Insert(ctx, run))
+	}
+
+	from := now.Add(-1 * time.Hour)
+	to := now.Add(1 * time.Hour)
+	// prevFrom = from - (to-from) = now-3h; prior window is [now-3h, now-1h).
+
+	// Current window: 2 runs for "a".
+	mk("a", now)
+	mk("a", now.Add(-30*time.Minute))
+	// Prior window: 3 runs for "a".
+	mk("a", now.Add(-2*time.Hour))
+	mk("a", now.Add(-2*time.Hour))
+	mk("a", now.Add(-2*time.Hour))
+	// Prior-only agent — present only before the window, must be excluded.
+	mk("ghost", now.Add(-2*time.Hour))
+
+	rows, err := s.AgentRuns.RunHealth(ctx, p.ID, from, to)
+	require.NoError(t, err)
+	require.Len(t, rows, 1) // ghost has no current-window runs → dropped by HAVING
+
+	a := rows[0]
+	assert.Equal(t, "a", a.AgentName)
+	assert.Equal(t, 2, a.TotalRuns)
+	assert.Equal(t, 3, a.PrevTotalRuns)
 }
 
 func TestAgentRunStore_RunHealth_returnsEmptySliceNotNil(t *testing.T) {
@@ -247,6 +284,111 @@ func TestAgentRunStore_RunsTimeseries_bucketsByInterval(t *testing.T) {
 	assert.Equal(t, 2, b.Completed)
 	assert.Equal(t, 1, b.Failed)
 	assert.Equal(t, 1, b.Loop)
+}
+
+func TestAgentRunStore_Summary_aggregatesRunsAndPercentiles(t *testing.T) {
+	ctx := context.Background()
+	s := testStorage(t)
+	p := testProject(t, s, "summary")
+
+	base := time.Now().Add(-time.Hour)
+	mk := func(status string, loop bool, cost float64, tokens, steps, dur int) {
+		run := &AgentRun{ProjectID: p.ID, AgentName: "a", Status: "running", Timestamp: base}
+		require.NoError(t, s.AgentRuns.Insert(ctx, run))
+		require.NoError(t, s.AgentRuns.Finish(ctx, run.ID, run.Timestamp, AgentRunFinish{
+			Status: status, LoopDetected: loop, TotalSteps: steps,
+			TotalTokens: tokens, TotalCostUSD: &cost, DurationMs: new(dur),
+		}))
+	}
+	mk("completed", false, 0.02, 1000, 5, 100)
+	mk("completed", false, 0.04, 2000, 7, 200)
+	mk("failed", true, 0.06, 3000, 9, 300)
+
+	got, prev, err := s.AgentRuns.SummaryWithPrev(ctx, p.ID, base.Add(-time.Hour), base.Add(time.Hour))
+	require.NoError(t, err)
+	assert.Equal(t, 3, got.TotalRuns)
+	assert.Equal(t, 2, got.CompletedRuns)
+	assert.Equal(t, 1, got.LoopRuns)
+	assert.InDelta(t, 2.0/3.0, got.CompletionRate, 0.001)
+	assert.InDelta(t, 1.0/3.0, got.LoopRate, 0.001)
+	require.NotNil(t, got.AvgCostUSD)
+	assert.InDelta(t, 0.04, *got.AvgCostUSD, 0.001)
+	assert.InDelta(t, 2000.0, got.AvgTokens, 0.001)
+	assert.Equal(t, 21, got.TotalSteps)     // 5+7+9
+	assert.Equal(t, 300, got.DurationP99Ms) // percentile_disc(0.99) of {100,200,300}
+	assert.Equal(t, 200, got.DurationP50Ms)
+	assert.Equal(t, 1, got.UniqueAgents) // folded in from the same scan
+
+	// All runs sit in the current window; the prior window is empty.
+	assert.Equal(t, 0, prev.TotalRuns)
+	assert.Equal(t, 0, prev.UniqueAgents)
+}
+
+func TestAgentRunStore_Summary_priorWindowAggregatesSeparately(t *testing.T) {
+	ctx := context.Background()
+	s := testStorage(t)
+	p := testProject(t, s, "summary-prev")
+
+	now := time.Now()
+	mk := func(name string, ts time.Time) {
+		run := &AgentRun{ProjectID: p.ID, AgentName: name, Status: "running", Timestamp: ts}
+		require.NoError(t, s.AgentRuns.Insert(ctx, run))
+	}
+
+	from := now.Add(-1 * time.Hour)
+	to := now.Add(1 * time.Hour)
+	// prevFrom = now-3h; prior window is [now-3h, now-1h).
+
+	mk("a", now)                    // current
+	mk("b", now.Add(-30*time.Minute)) // current, distinct agent
+	mk("a", now.Add(-2*time.Hour))  // prior
+	mk("c", now.Add(-2*time.Hour))  // prior, distinct agent
+
+	cur, prev, err := s.AgentRuns.SummaryWithPrev(ctx, p.ID, from, to)
+	require.NoError(t, err)
+	assert.Equal(t, 2, cur.TotalRuns)
+	assert.Equal(t, 2, cur.UniqueAgents) // a, b
+	assert.Equal(t, 2, prev.TotalRuns)
+	assert.Equal(t, 2, prev.UniqueAgents) // a, c
+}
+
+func TestAgentRunStore_Summary_emptyWindowZeroed(t *testing.T) {
+	ctx := context.Background()
+	s := testStorage(t)
+	p := testProject(t, s, "summary-empty")
+	got, _, err := s.AgentRuns.SummaryWithPrev(ctx, p.ID, time.Now().Add(-time.Hour), time.Now())
+	require.NoError(t, err)
+	assert.Equal(t, 0, got.TotalRuns)
+	assert.Equal(t, 0, got.DurationP95Ms)
+	assert.Nil(t, got.AvgCostUSD)
+}
+
+func TestAgentRunStore_TerminationCounts_groupsCoalescingNull(t *testing.T) {
+	ctx := context.Background()
+	s := testStorage(t)
+	p := testProject(t, s, "terms")
+	mk := func(reason *string) {
+		run := &AgentRun{ProjectID: p.ID, AgentName: "a", Status: "running"}
+		require.NoError(t, s.AgentRuns.Insert(ctx, run))
+		require.NoError(t, s.AgentRuns.Finish(ctx, run.ID, run.Timestamp, AgentRunFinish{
+			Status: "completed", TerminationReason: reason,
+		}))
+	}
+	mk(new("clean"))
+	mk(new("clean"))
+	mk(new("error"))
+	mk(nil) // → "unknown"
+
+	rows, err := s.AgentRuns.TerminationCounts(ctx, p.ID,
+		time.Now().Add(-time.Hour), time.Now().Add(time.Hour))
+	require.NoError(t, err)
+	m := map[string]int{}
+	for _, r := range rows {
+		m[r.TerminationReason] = r.Count
+	}
+	assert.Equal(t, 2, m["clean"])
+	assert.Equal(t, 1, m["error"])
+	assert.Equal(t, 1, m["unknown"])
 }
 
 func TestAgentRunStore_RunsTimeseries_returnsEmptySliceNotNil(t *testing.T) {

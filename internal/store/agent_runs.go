@@ -174,27 +174,36 @@ type RunHealthRow struct {
 	LoopRate       float64  `json:"loop_rate"`
 	AvgCostUSD     *float64 `json:"avg_cost_usd,omitempty"`
 	AvgTokens      float64  `json:"avg_tokens"`
+	PrevTotalRuns  int      `json:"prev_total_runs"`
 }
 
 // RunHealth rolls up run outcomes per agent_name across the project, scoped to a
-// time window. avg_cost_usd is null when no run in the group reported a cost.
+// time window. prev_total_runs carries each agent's run count over the equal
+// window immediately before [from, to) so callers can render deltas. Agents that
+// ran only in the prior window are excluded. avg_cost_usd is null when no run in
+// the current group reported a cost.
 func (s *AgentRunStore) RunHealth(ctx context.Context, projectID uuid.UUID, from, to time.Time) ([]*RunHealthRow, error) {
 	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
 	defer cancel()
 
+	prevFrom := from.Add(-to.Sub(from))
+
+	// One scan over [prevFrom, to); FILTER splits current vs prior window.
 	const q = `
 		SELECT agent_name,
-		       count(*)::int                                        AS total_runs,
-		       count(*) FILTER (WHERE status = 'completed')::int    AS completed_runs,
-		       count(*) FILTER (WHERE loop_detected)::int           AS loop_runs,
-		       avg(total_cost_usd)::float8                          AS avg_cost_usd,
-		       coalesce(avg(total_tokens), 0)::float8               AS avg_tokens
+		       count(*) FILTER (WHERE timestamp >= $2)::int                              AS total_runs,
+		       count(*) FILTER (WHERE timestamp >= $2 AND status = 'completed')::int     AS completed_runs,
+		       count(*) FILTER (WHERE timestamp >= $2 AND loop_detected)::int            AS loop_runs,
+		       avg(total_cost_usd) FILTER (WHERE timestamp >= $2)::float8                AS avg_cost_usd,
+		       coalesce(avg(total_tokens) FILTER (WHERE timestamp >= $2), 0)::float8     AS avg_tokens,
+		       count(*) FILTER (WHERE timestamp < $2)::int                               AS prev_total_runs
 		FROM agent_runs
-		WHERE project_id = $1 AND timestamp >= $2 AND timestamp < $3
+		WHERE project_id = $1 AND timestamp >= $4 AND timestamp < $3
 		GROUP BY agent_name
+		HAVING count(*) FILTER (WHERE timestamp >= $2) > 0
 		ORDER BY total_runs DESC
 	`
-	rows, err := s.pool.Query(ctx, q, projectID, from, to)
+	rows, err := s.pool.Query(ctx, q, projectID, from, to, prevFrom)
 	if err != nil {
 		return nil, err
 	}
@@ -205,15 +214,121 @@ func (s *AgentRunStore) RunHealth(ctx context.Context, projectID uuid.UUID, from
 		r := &RunHealthRow{}
 		if err := rows.Scan(
 			&r.AgentName, &r.TotalRuns, &r.CompletedRuns, &r.LoopRuns,
-			&r.AvgCostUSD, &r.AvgTokens,
+			&r.AvgCostUSD, &r.AvgTokens, &r.PrevTotalRuns,
 		); err != nil {
 			return nil, err
 		}
-		if r.TotalRuns > 0 {
-			r.CompletionRate = float64(r.CompletedRuns) / float64(r.TotalRuns)
-			r.LoopRate = float64(r.LoopRuns) / float64(r.TotalRuns)
-		}
+		r.CompletionRate = float64(r.CompletedRuns) / float64(r.TotalRuns)
+		r.LoopRate = float64(r.LoopRuns) / float64(r.TotalRuns)
 		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+type RunSummary struct {
+	TotalRuns      int      `json:"total_runs"`
+	CompletedRuns  int      `json:"completed_runs"`
+	LoopRuns       int      `json:"loop_runs"`
+	CompletionRate float64  `json:"completion_rate"`
+	LoopRate       float64  `json:"loop_rate"`
+	AvgCostUSD     *float64 `json:"avg_cost_usd,omitempty"`
+	AvgTokens      float64  `json:"avg_tokens"`
+	TotalSteps     int      `json:"total_steps"`
+	DurationP50Ms  int      `json:"duration_p50_ms"`
+	DurationP95Ms  int      `json:"duration_p95_ms"`
+	DurationP99Ms  int      `json:"duration_p99_ms"`
+	TotalToolCalls int      `json:"total_tool_calls"`
+	UniqueTools    int      `json:"unique_tools"`
+	UniqueAgents   int      `json:"unique_agents"`
+}
+
+func (r *RunSummary) computeRates() {
+	if r.TotalRuns > 0 {
+		r.CompletionRate = float64(r.CompletedRuns) / float64(r.TotalRuns)
+		r.LoopRate = float64(r.LoopRuns) / float64(r.TotalRuns)
+	}
+}
+
+// SummaryWithPrev aggregates run outcomes, duration percentiles, and unique
+// agent count for [from, to) and the equal window immediately before it, in a
+// single scan over [prevFrom, to). Step-derived fields (tool calls, unique
+// tools) live in agent_steps and are filled by the caller. avg_cost_usd is null
+// when no run in a window reported a cost.
+func (s *AgentRunStore) SummaryWithPrev(ctx context.Context, projectID uuid.UUID, from, to time.Time) (cur, prev *RunSummary, err error) {
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+	defer cancel()
+
+	prevFrom := from.Add(-to.Sub(from))
+
+	const q = `
+		SELECT
+			count(*) FILTER (WHERE timestamp >= $2)::int                                          AS cur_total,
+			count(*) FILTER (WHERE timestamp >= $2 AND status = 'completed')::int                 AS cur_completed,
+			count(*) FILTER (WHERE timestamp >= $2 AND loop_detected)::int                        AS cur_loops,
+			avg(total_cost_usd) FILTER (WHERE timestamp >= $2)::float8                            AS cur_avg_cost,
+			coalesce(avg(total_tokens) FILTER (WHERE timestamp >= $2), 0)::float8                 AS cur_avg_tokens,
+			coalesce(sum(total_steps) FILTER (WHERE timestamp >= $2), 0)::int                     AS cur_steps,
+			coalesce(percentile_disc(0.50) WITHIN GROUP (ORDER BY duration_ms) FILTER (WHERE timestamp >= $2), 0)::int AS cur_p50,
+			coalesce(percentile_disc(0.95) WITHIN GROUP (ORDER BY duration_ms) FILTER (WHERE timestamp >= $2), 0)::int AS cur_p95,
+			coalesce(percentile_disc(0.99) WITHIN GROUP (ORDER BY duration_ms) FILTER (WHERE timestamp >= $2), 0)::int AS cur_p99,
+			count(DISTINCT agent_name) FILTER (WHERE timestamp >= $2)::int                        AS cur_agents,
+
+			count(*) FILTER (WHERE timestamp < $2)::int                                           AS prev_total,
+			count(*) FILTER (WHERE timestamp < $2 AND status = 'completed')::int                  AS prev_completed,
+			count(*) FILTER (WHERE timestamp < $2 AND loop_detected)::int                         AS prev_loops,
+			avg(total_cost_usd) FILTER (WHERE timestamp < $2)::float8                             AS prev_avg_cost,
+			coalesce(avg(total_tokens) FILTER (WHERE timestamp < $2), 0)::float8                  AS prev_avg_tokens,
+			coalesce(sum(total_steps) FILTER (WHERE timestamp < $2), 0)::int                      AS prev_steps,
+			coalesce(percentile_disc(0.50) WITHIN GROUP (ORDER BY duration_ms) FILTER (WHERE timestamp < $2), 0)::int AS prev_p50,
+			coalesce(percentile_disc(0.95) WITHIN GROUP (ORDER BY duration_ms) FILTER (WHERE timestamp < $2), 0)::int AS prev_p95,
+			coalesce(percentile_disc(0.99) WITHIN GROUP (ORDER BY duration_ms) FILTER (WHERE timestamp < $2), 0)::int AS prev_p99,
+			count(DISTINCT agent_name) FILTER (WHERE timestamp < $2)::int                         AS prev_agents
+		FROM agent_runs
+		WHERE project_id = $1 AND timestamp >= $4 AND timestamp < $3
+	`
+	cur = &RunSummary{}
+	prev = &RunSummary{}
+	err = s.pool.QueryRow(ctx, q, projectID, from, to, prevFrom).Scan(
+		&cur.TotalRuns, &cur.CompletedRuns, &cur.LoopRuns, &cur.AvgCostUSD, &cur.AvgTokens,
+		&cur.TotalSteps, &cur.DurationP50Ms, &cur.DurationP95Ms, &cur.DurationP99Ms, &cur.UniqueAgents,
+		&prev.TotalRuns, &prev.CompletedRuns, &prev.LoopRuns, &prev.AvgCostUSD, &prev.AvgTokens,
+		&prev.TotalSteps, &prev.DurationP50Ms, &prev.DurationP95Ms, &prev.DurationP99Ms, &prev.UniqueAgents,
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+	cur.computeRates()
+	prev.computeRates()
+	return cur, prev, nil
+}
+
+type TerminationCount struct {
+	TerminationReason string `json:"termination_reason"`
+	Count             int    `json:"count"`
+}
+
+func (s *AgentRunStore) TerminationCounts(ctx context.Context, projectID uuid.UUID, from, to time.Time) ([]*TerminationCount, error) {
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+	defer cancel()
+	const q = `
+		SELECT coalesce(termination_reason, 'unknown') AS reason, count(*)::int
+		FROM agent_runs
+		WHERE project_id = $1 AND timestamp >= $2 AND timestamp < $3
+		GROUP BY reason
+		ORDER BY count(*) DESC
+	`
+	rows, err := s.pool.Query(ctx, q, projectID, from, to)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]*TerminationCount, 0)
+	for rows.Next() {
+		c := &TerminationCount{}
+		if err := rows.Scan(&c.TerminationReason, &c.Count); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
 	}
 	return out, rows.Err()
 }

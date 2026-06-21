@@ -203,6 +203,33 @@ func (app *application) listAgentLoopsHandler(w http.ResponseWriter, r *http.Req
 	}
 }
 
+// StepTypeDistribution godoc
+//
+//	@Summary	Step counts grouped by step_type
+//	@Tags		agent
+//	@Produce	json
+//	@Param		from	query	string	false	"RFC3339, default now - 30d"
+//	@Param		to		query	string	false	"RFC3339, default now"
+//	@Success	200		{array}	store.StepTypeCount
+//	@Security	ApiKeyAuth
+//	@Router		/agent/steps/distribution [get]
+func (app *application) stepDistributionHandler(w http.ResponseWriter, r *http.Request) {
+	projectID := projectIDFromContext(r.Context())
+	params, err := parseListParams(r)
+	if err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+	dist, err := app.store.AgentSteps.StepTypeDistribution(r.Context(), projectID, params.From, params.To)
+	if err != nil {
+		app.internalServerError(w, r, err)
+		return
+	}
+	if err := app.jsonResponse(w, http.StatusOK, dist); err != nil {
+		app.internalServerError(w, r, err)
+	}
+}
+
 // ToolStats godoc
 //
 //	@Summary		Per-tool usage analytics for the calling project

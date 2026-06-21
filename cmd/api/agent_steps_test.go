@@ -122,3 +122,17 @@ func TestToolStatsHandler_returns401WithoutKey(t *testing.T) {
 	resp, _ := doJSON(t, http.MethodGet, srv.URL+"/v1/agent/tools/stats", "", nil, nil)
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 }
+
+func TestStepDistributionHandler_returns200(t *testing.T) {
+	srv, projectID, key, app := newTestServer(t)
+	ctx := context.Background()
+	run := &store.AgentRun{ProjectID: uuid.MustParse(projectID), AgentName: "a", Status: "running"}
+	require.NoError(t, app.store.AgentRuns.Insert(ctx, run))
+	require.NoError(t, app.store.AgentSteps.Insert(ctx, &store.AgentStep{
+		ProjectID: uuid.MustParse(projectID), AgentRunID: run.ID, StepIndex: 1, StepType: "think",
+	}))
+	var body struct{ Data []store.StepTypeCount `json:"data"` }
+	resp, raw := doJSON(t, http.MethodGet, srv.URL+"/v1/agent/steps/distribution", key, nil, &body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "body=%s", raw)
+	require.NotEmpty(t, body.Data)
+}

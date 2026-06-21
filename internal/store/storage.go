@@ -45,6 +45,8 @@ type Storage struct {
 		ListByProject(ctx context.Context, projectID uuid.UUID, from, to time.Time, limit, offset int) ([]*AgentRun, error)
 		RunHealth(ctx context.Context, projectID uuid.UUID, from, to time.Time) ([]*RunHealthRow, error)
 		RunsTimeseries(ctx context.Context, projectID uuid.UUID, from, to time.Time, interval string) ([]*RunBucket, error)
+		SummaryWithPrev(ctx context.Context, projectID uuid.UUID, from, to time.Time) (cur, prev *RunSummary, err error)
+		TerminationCounts(ctx context.Context, projectID uuid.UUID, from, to time.Time) ([]*TerminationCount, error)
 	}
 	AgentSteps interface {
 		Insert(ctx context.Context, st *AgentStep) error
@@ -52,6 +54,8 @@ type Storage struct {
 		ListByRun(ctx context.Context, projectID, runID uuid.UUID, from, to time.Time, limit int) ([]*AgentStep, error)
 		ListLoops(ctx context.Context, projectID, runID uuid.UUID, from, to time.Time) ([]*LoopHit, error)
 		ToolStats(ctx context.Context, projectID uuid.UUID, from, to time.Time) ([]*ToolStat, error)
+		StepTypeDistribution(ctx context.Context, projectID uuid.UUID, from, to time.Time) ([]*StepTypeCount, error)
+		StepCountsWithPrev(ctx context.Context, projectID uuid.UUID, from, to time.Time) (cur, prev *StepCounts, err error)
 	}
 	AgentTools interface {
 		UpsertSeen(ctx context.Context, projectID uuid.UUID, toolName string) error
