@@ -26,7 +26,7 @@ var testPool *pgxpool.Pool
 func TestMain(m *testing.M) {
 	addr := os.Getenv("TEST_DB_ADDR")
 	if addr == "" {
-		addr = "postgres://vigil:vigil@localhost:5432/vigil?sslmode=disable"
+		addr = "postgres://keelwave:keelwave@localhost:5432/keelwave?sslmode=disable"
 	}
 	pool, err := pgxpool.New(context.Background(), addr)
 	if err != nil {

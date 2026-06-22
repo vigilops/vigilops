@@ -1638,7 +1638,7 @@ const docTemplate = `{
     },
     "securityDefinitions": {
         "ApiKeyAuth": {
-            "description": "Format: \"Bearer vgl_\u003ctoken\u003e\"",
+            "description": "Format: \"Bearer kw_\u003ctoken\u003e\"",
             "type": "apiKey",
             "name": "Authorization",
             "in": "header"

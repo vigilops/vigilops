@@ -15,7 +15,7 @@ import (
 func main() {
 	ctx := context.Background()
 
-	addr := env.GetString("DB_ADDR", "postgres://vigil:vigil@localhost:5432/vigil?sslmode=disable")
+	addr := env.GetString("DB_ADDR", "postgres://keelwave:keelwave@localhost:5432/keelwave?sslmode=disable")
 	projectName := env.GetString("SEED_PROJECT_NAME", "dev")
 	keyName := env.GetString("SEED_KEY_NAME", "seed")
 
