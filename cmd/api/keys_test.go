@@ -23,7 +23,7 @@ func TestCreateKeyHandler_returnsPlaintextOnce(t *testing.T) {
 		map[string]any{"name": "fresh"}, &body)
 
 	require.Equal(t, http.StatusCreated, resp.StatusCode, "body=%s", raw)
-	assert.True(t, strings.HasPrefix(body.Data.Key, "vgl_"), "plaintext returned with prefix")
+	assert.True(t, strings.HasPrefix(body.Data.Key, "kw_"), "plaintext returned with prefix")
 	assert.NotEmpty(t, body.Data.ID)
 }
 

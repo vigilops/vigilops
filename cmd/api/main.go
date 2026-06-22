@@ -28,7 +28,7 @@ const version = "0.0.1"
 // @securityDefinitions.apikey	ApiKeyAuth
 // @in							header
 // @name						Authorization
-// @description				Format: "Bearer vgl_<token>"
+// @description				Format: "Bearer kw_<token>"
 func main() {
 	cfg := config{
 		addr:        env.GetString("ADDR", ":8080"),

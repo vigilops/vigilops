@@ -1087,7 +1087,7 @@ paths:
       - ingest
 securityDefinitions:
   ApiKeyAuth:
-    description: 'Format: "Bearer vgl_<token>"'
+    description: 'Format: "Bearer kw_<token>"'
     in: header
     name: Authorization
     type: apiKey

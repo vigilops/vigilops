@@ -7,8 +7,8 @@ export const env = createEnv({
   clientPrefix: "VITE_",
 
   client: {
-    VITE_VIGIL_API_URL: z.url(),
-    VITE_VIGIL_API_KEY: z.string().optional(),
+    VITE_KEELWAVE_API_URL: z.url(),
+    VITE_KEELWAVE_API_KEY: z.string().optional(),
   },
 
   runtimeEnv: import.meta.env,

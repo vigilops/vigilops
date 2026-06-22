@@ -1,6 +1,6 @@
 import { env } from "@/env"
 
-const BASE_URL = env.VITE_VIGIL_API_URL.replace(/\/$/, "")
+const BASE_URL = env.VITE_KEELWAVE_API_URL.replace(/\/$/, "")
 
 export class ApiError extends Error {
   constructor(
@@ -29,8 +29,8 @@ async function request<T>(
   }
 
   const headers: Record<string, string> = { Accept: "application/json" }
-  if (env.VITE_VIGIL_API_KEY) {
-    headers["X-API-Key"] = env.VITE_VIGIL_API_KEY
+  if (env.VITE_KEELWAVE_API_KEY) {
+    headers["X-API-Key"] = env.VITE_KEELWAVE_API_KEY
   }
 
   const res = await fetch(url, { headers })

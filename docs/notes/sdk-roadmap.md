@@ -91,7 +91,7 @@ Constraint: decorator is a **wrapper** around the existing `Vigil.run()` + `Run.
 
 What it specifically does NOT do:
 - Does not become the only way to instrument. The context-manager + method API remains first-class.
-- Does not run instrumentation if `VIGIL_API_KEY` is unset (silent no-op + warning, observability never crashes the app).
+- Does not run instrumentation if `KEELWAVE_API_KEY` is unset (silent no-op + warning, observability never crashes the app).
 - Does not auto-instrument any framework (langchain, llamaindex). That's v1.0 territory.
 
 Server: no change. Decorator emits the same `/v1/ingest/agent/*` calls.

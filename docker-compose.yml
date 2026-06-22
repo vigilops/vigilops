@@ -2,13 +2,13 @@ services:
   db:
     image: timescale/timescaledb:latest-pg18
     environment:
-      POSTGRES_USER: vigil
-      POSTGRES_PASSWORD: vigil
-      POSTGRES_DB: vigil
+      POSTGRES_USER: keelwave
+      POSTGRES_PASSWORD: keelwave
+      POSTGRES_DB: keelwave
     ports:
       - "5432:5432"
     volumes:
-      - vigil_db:/var/lib/postgresql
+      - keelwave_db:/var/lib/postgresql
 
 volumes:
-  vigil_db:
+  keelwave_db:

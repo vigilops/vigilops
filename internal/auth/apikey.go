@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	KeyPrefix    = "vgl_"
+	KeyPrefix    = "kw_"
 	keyByteLen   = 32
 	HashByteSize = sha256.Size
 )
@@ -22,7 +22,7 @@ var (
 var keyEncoding = base32.StdEncoding.WithPadding(base32.NoPadding)
 
 // Generate returns a fresh API key (plaintext, show once to user) and its
-// SHA-256 hash (store this). Plaintext = "vgl_" + base32(32 random bytes).
+// SHA-256 hash (store this). Plaintext = "kw_" + base32(32 random bytes).
 func Generate() (plaintext string, hash []byte, err error) {
 	buf := make([]byte, keyByteLen)
 	if _, err = rand.Read(buf); err != nil {

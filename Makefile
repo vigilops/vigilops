@@ -1,7 +1,7 @@
 .PHONY: run dev build tidy db-up db-down migrate-create migrate-up migrate-down migrate-force migrate-version gen-docs fmt test seed
 
 MIGRATIONS_PATH = ./cmd/migrate/migrations
-DB_ADDR ?= postgres://vigil:vigil@localhost:5432/vigil?sslmode=disable
+DB_ADDR ?= postgres://keelwave:keelwave@localhost:5432/keelwave?sslmode=disable
 
 run:
 	@go run ./cmd/api

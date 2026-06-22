@@ -12,7 +12,7 @@ func TestGenerate_returnsPrefixedKeyAndHash(t *testing.T) {
 	plaintext, hash, err := Generate()
 	require.NoError(t, err)
 
-	assert.True(t, strings.HasPrefix(plaintext, KeyPrefix), "plaintext must use vgl_ prefix")
+	assert.True(t, strings.HasPrefix(plaintext, KeyPrefix), "plaintext must use kw_ prefix")
 	assert.Greater(t, len(plaintext), len(KeyPrefix)+20, "key body must be substantial")
 	assert.Len(t, hash, HashByteSize, "hash must be 32 bytes (SHA-256)")
 }
@@ -36,9 +36,9 @@ func TestHash_isDeterministicAndMatchesGenerate(t *testing.T) {
 }
 
 func TestParse_trimsWhitespace(t *testing.T) {
-	got, err := Parse("  vgl_abc  ")
+	got, err := Parse("  kw_abc  ")
 	require.NoError(t, err)
-	assert.Equal(t, "vgl_abc", got)
+	assert.Equal(t, "kw_abc", got)
 }
 
 func TestParse_rejectsEmpty(t *testing.T) {
@@ -47,6 +47,6 @@ func TestParse_rejectsEmpty(t *testing.T) {
 }
 
 func TestParse_rejectsMissingPrefix(t *testing.T) {
-	_, err := Parse("not-a-vigil-key")
+	_, err := Parse("not-a-keelwave-key")
 	assert.ErrorIs(t, err, ErrBadKey)
 }
