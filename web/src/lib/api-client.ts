@@ -5,7 +5,7 @@ const BASE_URL = env.VITE_KEELWAVE_API_URL.replace(/\/$/, "")
 export class ApiError extends Error {
   constructor(
     public status: number,
-    message: string,
+    message: string
   ) {
     super(message)
     this.name = "ApiError"
@@ -14,39 +14,81 @@ export class ApiError extends Error {
 
 type QueryValue = string | number | boolean | undefined | null
 
-/** Thin typed fetch wrapper around the keelwave API. */
-async function request<T>(
-  path: string,
-  params?: Record<string, QueryValue>,
-): Promise<T> {
-  const url = new URL(`${BASE_URL}${path}`)
-  if (params) {
-    for (const [key, value] of Object.entries(params)) {
-      if (value !== undefined && value !== null) {
-        url.searchParams.set(key, String(value))
-      }
-    }
-  }
-
-  const headers: Record<string, string> = { Accept: "application/json" }
-  if (env.VITE_KEELWAVE_API_KEY) {
-    headers["X-API-Key"] = env.VITE_KEELWAVE_API_KEY
-  }
-
-  const res = await fetch(url, { headers })
-
+async function parseResponse<T>(res: Response, path: string): Promise<T> {
   if (!res.ok) {
     const body = (await res.json().catch(() => null)) as {
       error?: string
     } | null
+    if (res.status === 401 && !path.includes("/auth/")) {
+      window.dispatchEvent(new CustomEvent("keelwave:unauthorized"))
+    }
     throw new ApiError(res.status, body?.error ?? res.statusText)
   }
-
-  // The Go API wraps every success body in a { "data": ... } envelope.
+  if (res.status === 204) return undefined as T
   const body = (await res.json()) as { data: T }
   return body.data
 }
 
+async function get<T>(
+  path: string,
+  params?: Record<string, QueryValue>
+): Promise<T> {
+  const url = new URL(`${BASE_URL}${path}`)
+  if (params) {
+    for (const [key, value] of Object.entries(params)) {
+      if (value !== undefined && value !== null)
+        url.searchParams.set(key, String(value))
+    }
+  }
+  const res = await fetch(url, {
+    headers: { Accept: "application/json" },
+    credentials: "include",
+  })
+  return parseResponse<T>(res, path)
+}
+
+async function post<T>(path: string, data?: unknown): Promise<T> {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: data !== undefined ? JSON.stringify(data) : undefined,
+    credentials: "include",
+  })
+  return parseResponse<T>(res, path)
+}
+
+async function patch<T>(path: string, data?: unknown): Promise<T> {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: data !== undefined ? JSON.stringify(data) : undefined,
+    credentials: "include",
+  })
+  return parseResponse<T>(res, path)
+}
+
+async function put<T>(path: string, data?: unknown): Promise<T> {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: data !== undefined ? JSON.stringify(data) : undefined,
+    credentials: "include",
+  })
+  return parseResponse<T>(res, path)
+}
+
+async function del(path: string): Promise<void> {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method: "DELETE",
+    credentials: "include",
+  })
+  return parseResponse<void>(res, path)
+}
+
 export const apiClient = {
-  get: request,
+  get,
+  post,
+  put,
+  patch,
+  delete: del,
 }

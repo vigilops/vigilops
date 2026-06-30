@@ -3,6 +3,7 @@ import {
   Scripts,
   createRootRouteWithContext,
 } from "@tanstack/react-router"
+import { useEffect } from "react"
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools"
 import { TanStackDevtools } from "@tanstack/react-devtools"
 import type { QueryClient } from "@tanstack/react-query"
@@ -36,8 +37,8 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       },
       {
         rel: "icon",
-        type: "image/png",
-        href: "/logo.png",
+        type: "image/svg+xml",
+        href: "/keelwave-icon.svg",
       },
     ],
   }),
@@ -51,6 +52,14 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 })
 
 function RootDocument({ children }: { children: React.ReactNode }) {
+  useEffect(() => {
+    const handle = () => {
+      window.location.replace("/login")
+    }
+    window.addEventListener("keelwave:unauthorized", handle)
+    return () => window.removeEventListener("keelwave:unauthorized", handle)
+  }, [])
+
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
