@@ -95,7 +95,7 @@ func TestAPIKeyStore_Delete_removesRow(t *testing.T) {
 	p := testProject(t, s, "keydelete")
 
 	k := makeKey(t, ctx, s, p.ID, "deleteme")
-	require.NoError(t, s.APIKeys.Delete(ctx, k.ID))
+	require.NoError(t, s.APIKeys.Delete(ctx, k.ID, p.ID))
 	_, err := s.APIKeys.GetByHash(ctx, k.KeyHash)
 	assert.ErrorIs(t, err, ErrNotFound)
 }
@@ -103,6 +103,6 @@ func TestAPIKeyStore_Delete_removesRow(t *testing.T) {
 func TestAPIKeyStore_Delete_notFoundForUnknownID(t *testing.T) {
 	ctx := context.Background()
 	s := testStorage(t)
-	err := s.APIKeys.Delete(ctx, uuid.New())
+	err := s.APIKeys.Delete(ctx, uuid.New(), uuid.New())
 	assert.ErrorIs(t, err, ErrNotFound)
 }

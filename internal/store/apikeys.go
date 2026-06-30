@@ -96,12 +96,12 @@ func (s *APIKeyStore) ListByProject(ctx context.Context, projectID uuid.UUID) ([
 	return keys, rows.Err()
 }
 
-func (s *APIKeyStore) Delete(ctx context.Context, id uuid.UUID) error {
+func (s *APIKeyStore) Delete(ctx context.Context, id, projectID uuid.UUID) error {
 	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
 	defer cancel()
 
-	const q = `DELETE FROM api_keys WHERE id = $1`
-	tag, err := s.pool.Exec(ctx, q, id)
+	const q = `DELETE FROM api_keys WHERE id = $1 AND project_id = $2`
+	tag, err := s.pool.Exec(ctx, q, id, projectID)
 	if err != nil {
 		return err
 	}

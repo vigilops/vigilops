@@ -39,14 +39,30 @@ func testStorage(t *testing.T) Storage {
 	return NewStorage(testPool)
 }
 
-// testProject creates an isolated project for one test. The cascade DELETE on
-// the projects FK cleans up every child row when the test ends.
+func testOrgForUser(t *testing.T, s Storage, u *User) *Organization {
+	t.Helper()
+	org := &Organization{Name: fmt.Sprintf("org-%d", time.Now().UnixNano())}
+	require.NoError(t, s.Organizations.CreateWithOwner(context.Background(), org, u.ID))
+	return org
+}
+
+// testProject creates an isolated project (with a throw-away owner) for one test.
+// Cascade DELETE on the projects FK cleans up child rows when the test ends.
 func testProject(t *testing.T, s Storage, label string) *Project {
 	t.Helper()
+	p, _ := testProjectWithOwner(t, s, label)
+	return p
+}
+
+// testProjectWithOwner is like testProject but also returns the owning user.
+func testProjectWithOwner(t *testing.T, s Storage, label string) (*Project, *User) {
+	t.Helper()
+	u := testUser(t, s, label)
+	org := testOrgForUser(t, s, u)
 	p := &Project{Name: fmt.Sprintf("test-%s-%d", label, time.Now().UnixNano())}
-	require.NoError(t, s.Projects.Create(context.Background(), p))
+	require.NoError(t, s.Projects.Create(context.Background(), p, org.ID))
 	t.Cleanup(func() {
 		_ = s.Projects.Delete(context.Background(), p.ID)
 	})
-	return p
+	return p, u
 }
