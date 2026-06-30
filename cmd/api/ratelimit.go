@@ -8,7 +8,7 @@ import (
 )
 
 // Returns empty string if api_key_id is missing from ctx — that means
-// the route was mounted without apiKeyAuth (wiring bug). httprate keys
+// the route was mounted without apiKeyAuthMiddleware (wiring bug). httprate keys
 // requests by this string, so all anomalous requests share one
 // rate-limit counter rather than panicking the handler.
 func (app *application) ingestKeyFunc(r *http.Request) (string, error) {

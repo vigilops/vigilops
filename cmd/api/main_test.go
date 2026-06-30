@@ -18,8 +18,17 @@ import (
 
 	"github.com/keelwave/keelwave/internal/auth"
 	"github.com/keelwave/keelwave/internal/batch"
+	"github.com/keelwave/keelwave/internal/mailer"
 	"github.com/keelwave/keelwave/internal/store"
 )
+
+type noopMailer struct{}
+
+func (noopMailer) Send(_ string, _ string, _ any) error { return nil }
+
+var _ mailer.Client = noopMailer{}
+
+const testCookieName = "kw_session"
 
 var testPool *pgxpool.Pool
 
@@ -41,21 +50,46 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func newTestServer(t *testing.T) (srv *httptest.Server, projectID string, apiKey string, app *application) {
+type testServer struct {
+	srv    *httptest.Server
+	projID string
+	orgID  string
+	apiKey string
+	app    *application
+	cookie *http.Cookie // session cookie for userAuthMiddleware-protected routes
+}
+
+func newTestServer(t *testing.T) *testServer {
 	t.Helper()
 	ctx := context.Background()
 
 	s := store.NewStorage(testPool)
 
-	proj := &store.Project{Name: fmt.Sprintf("test-%d", time.Now().UnixNano())}
-	require.NoError(t, s.Projects.Create(ctx, proj))
+	u := &store.User{Email: fmt.Sprintf("test-%d@dev.local", time.Now().UnixNano()), Name: "test", IsVerified: true}
+	require.NoError(t, u.Password.Set("testpass"))
+	require.NoError(t, s.Users.Create(ctx, u, nil))
 
-	plaintext, hash, err := auth.Generate()
+	org := &store.Organization{Name: fmt.Sprintf("org-%d", time.Now().UnixNano())}
+	require.NoError(t, s.Organizations.CreateWithOwner(ctx, org, u.ID))
+
+	proj := &store.Project{Name: fmt.Sprintf("test-%d", time.Now().UnixNano())}
+	require.NoError(t, s.Projects.Create(ctx, proj, org.ID))
+
+	apiPlaintext, apiHash, err := auth.Generate()
 	require.NoError(t, err)
-	key := &store.APIKey{ProjectID: proj.ID, KeyHash: hash, Name: "test"}
+	key := &store.APIKey{ProjectID: proj.ID, KeyHash: apiHash, Name: "test"}
 	require.NoError(t, s.APIKeys.Create(ctx, key))
 
-	app = &application{
+	sessPlaintext, sessHash, err := auth.GenerateSession()
+	require.NoError(t, err)
+	sess := &store.Session{
+		UserID:    u.ID,
+		TokenHash: sessHash,
+		ExpiresAt: time.Now().Add(24 * time.Hour),
+	}
+	require.NoError(t, s.Sessions.Create(ctx, sess))
+
+	app := &application{
 		config: config{
 			env: "test",
 			rateLimit: rateLimitConfig{
@@ -63,23 +97,38 @@ func newTestServer(t *testing.T) (srv *httptest.Server, projectID string, apiKey
 				ingestKeyPerMinute: 1_000_000,
 				ingestWindow:       time.Minute,
 			},
+			auth: authConfig{
+				cookieName:   testCookieName,
+				sessionTTL:   24 * time.Hour,
+				dashboardURL: "http://localhost:3000",
+			},
 		},
 		pool:     testPool,
 		store:    s,
 		batchers: batch.NewBatchers(testPool, batch.Config{}, zap.NewNop().Sugar()),
+		mailer:   noopMailer{},
 		logger:   zap.NewNop().Sugar(),
 	}
 
-	srv = httptest.NewServer(app.mount())
+	srv := httptest.NewServer(app.mount())
 	t.Cleanup(func() {
 		srv.Close()
 		_ = s.Projects.Delete(ctx, proj.ID)
 	})
-	return srv, proj.ID.String(), plaintext, app
+
+	return &testServer{
+		srv:    srv,
+		projID: proj.ID.String(),
+		orgID:  org.ID.String(),
+		apiKey: apiPlaintext,
+		app:    app,
+		cookie: &http.Cookie{Name: testCookieName, Value: sessPlaintext},
+	}
 }
 
-// doJSON issues an authenticated request and unmarshals the response body.
-func doJSON(t *testing.T, method, url, key string, body any, out any) (*http.Response, []byte) {
+// doJSON issues a request and unmarshals the response body.
+// Pass cookies (e.g. ts.cookie for session auth) as optional trailing args.
+func doJSON(t *testing.T, method, url, key string, body any, out any, cookies ...*http.Cookie) (*http.Response, []byte) {
 	t.Helper()
 	var rdr io.Reader
 	if body != nil {
@@ -93,6 +142,11 @@ func doJSON(t *testing.T, method, url, key string, body any, out any) (*http.Res
 		req.Header.Set("Authorization", "Bearer "+key)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	for _, c := range cookies {
+		if c != nil {
+			req.AddCookie(c)
+		}
+	}
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
 	raw, err := io.ReadAll(resp.Body)

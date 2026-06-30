@@ -15,17 +15,17 @@ import (
 )
 
 func TestListLoopsHandler_returnsHits3ForLoopingRun(t *testing.T) {
-	srv, projectID, key, app := newTestServer(t)
+	ts := newTestServer(t)
 	ctx := context.Background()
-	pid := uuid.MustParse(projectID)
+	pid := uuid.MustParse(ts.projID)
 
 	run := &store.AgentRun{ProjectID: pid, AgentName: "looper", Status: "running"}
-	require.NoError(t, app.store.AgentRuns.Insert(ctx, run))
+	require.NoError(t, ts.app.store.AgentRuns.Insert(ctx, run))
 
 	tool := "search"
 	fp := []byte{0xaa, 0xbb, 0xcc}
 	for i := 1; i <= 3; i++ {
-		require.NoError(t, app.store.AgentSteps.Insert(ctx, &store.AgentStep{
+		require.NoError(t, ts.app.store.AgentSteps.Insert(ctx, &store.AgentStep{
 			ProjectID:        pid,
 			AgentRunID:       run.ID,
 			StepIndex:        i,
@@ -35,8 +35,8 @@ func TestListLoopsHandler_returnsHits3ForLoopingRun(t *testing.T) {
 		}))
 	}
 
-	url := fmt.Sprintf("%s/v1/agent/runs/%s/loops?at=%s",
-		srv.URL, run.ID, run.Timestamp.UTC().Format(time.RFC3339Nano))
+	url := fmt.Sprintf("%s/v1/projects/%s/agent/runs/%s/loops?at=%s",
+		ts.srv.URL, ts.projID, run.ID, run.Timestamp.UTC().Format(time.RFC3339Nano))
 	var body struct {
 		Data []struct {
 			Hits        int    `json:"hits"`
@@ -44,7 +44,7 @@ func TestListLoopsHandler_returnsHits3ForLoopingRun(t *testing.T) {
 			ToolName    string `json:"tool_name"`
 		} `json:"data"`
 	}
-	resp, raw := doJSON(t, http.MethodGet, url, key, nil, &body)
+	resp, raw := doJSON(t, http.MethodGet, url, ts.apiKey, nil, &body)
 
 	require.Equal(t, http.StatusOK, resp.StatusCode, "body=%s", raw)
 	require.Len(t, body.Data, 1)
@@ -54,14 +54,14 @@ func TestListLoopsHandler_returnsHits3ForLoopingRun(t *testing.T) {
 }
 
 func TestListStepsHandler_returnsStepsOrderedByIndex(t *testing.T) {
-	srv, projectID, key, app := newTestServer(t)
+	ts := newTestServer(t)
 	ctx := context.Background()
-	pid := uuid.MustParse(projectID)
+	pid := uuid.MustParse(ts.projID)
 
 	run := &store.AgentRun{ProjectID: pid, AgentName: "stepper", Status: "running"}
-	require.NoError(t, app.store.AgentRuns.Insert(ctx, run))
+	require.NoError(t, ts.app.store.AgentRuns.Insert(ctx, run))
 	for _, idx := range []int{3, 1, 2} {
-		require.NoError(t, app.store.AgentSteps.Insert(ctx, &store.AgentStep{
+		require.NoError(t, ts.app.store.AgentSteps.Insert(ctx, &store.AgentStep{
 			ProjectID:  pid,
 			AgentRunID: run.ID,
 			StepIndex:  idx,
@@ -69,14 +69,14 @@ func TestListStepsHandler_returnsStepsOrderedByIndex(t *testing.T) {
 		}))
 	}
 
-	url := fmt.Sprintf("%s/v1/agent/runs/%s/steps?at=%s",
-		srv.URL, run.ID, run.Timestamp.UTC().Format(time.RFC3339Nano))
+	url := fmt.Sprintf("%s/v1/projects/%s/agent/runs/%s/steps?at=%s",
+		ts.srv.URL, ts.projID, run.ID, run.Timestamp.UTC().Format(time.RFC3339Nano))
 	var body struct {
 		Data []struct {
 			StepIndex int `json:"step_index"`
 		} `json:"data"`
 	}
-	resp, raw := doJSON(t, http.MethodGet, url, key, nil, &body)
+	resp, raw := doJSON(t, http.MethodGet, url, ts.apiKey, nil, &body)
 
 	require.Equal(t, http.StatusOK, resp.StatusCode, "body=%s", raw)
 	require.Len(t, body.Data, 3)
@@ -84,12 +84,12 @@ func TestListStepsHandler_returnsStepsOrderedByIndex(t *testing.T) {
 }
 
 func TestToolStatsHandler_returns200WithAggregates(t *testing.T) {
-	srv, projectID, key, app := newTestServer(t)
+	ts := newTestServer(t)
 	ctx := context.Background()
-	pid := uuid.MustParse(projectID)
+	pid := uuid.MustParse(ts.projID)
 
 	run := &store.AgentRun{ProjectID: pid, AgentName: "tool-stats", Status: "running"}
-	require.NoError(t, app.store.AgentRuns.Insert(ctx, run))
+	require.NoError(t, ts.app.store.AgentRuns.Insert(ctx, run))
 
 	search := "search"
 	steps := []*store.AgentStep{
@@ -101,13 +101,13 @@ func TestToolStatsHandler_returns200WithAggregates(t *testing.T) {
 		st.AgentRunID = run.ID
 		st.StepIndex = i + 1
 		st.StepType = "tool_call"
-		require.NoError(t, app.store.AgentSteps.Insert(ctx, st))
+		require.NoError(t, ts.app.store.AgentSteps.Insert(ctx, st))
 	}
 
 	var body struct {
 		Data []store.ToolStat `json:"data"`
 	}
-	resp, raw := doJSON(t, http.MethodGet, srv.URL+"/v1/agent/tools/stats", key, nil, &body)
+	resp, raw := doJSON(t, http.MethodGet, ts.srv.URL+"/v1/projects/"+ts.projID+"/agent/tools/stats", ts.apiKey, nil, &body)
 
 	require.Equal(t, http.StatusOK, resp.StatusCode, "body=%s", raw)
 	require.Len(t, body.Data, 1)
@@ -118,21 +118,22 @@ func TestToolStatsHandler_returns200WithAggregates(t *testing.T) {
 }
 
 func TestToolStatsHandler_returns401WithoutKey(t *testing.T) {
-	srv, _, _, _ := newTestServer(t)
-	resp, _ := doJSON(t, http.MethodGet, srv.URL+"/v1/agent/tools/stats", "", nil, nil)
+	ts := newTestServer(t)
+	resp, _ := doJSON(t, http.MethodGet, ts.srv.URL+"/v1/projects/"+ts.projID+"/agent/tools/stats", "", nil, nil)
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 }
 
 func TestStepDistributionHandler_returns200(t *testing.T) {
-	srv, projectID, key, app := newTestServer(t)
+	ts := newTestServer(t)
 	ctx := context.Background()
-	run := &store.AgentRun{ProjectID: uuid.MustParse(projectID), AgentName: "a", Status: "running"}
-	require.NoError(t, app.store.AgentRuns.Insert(ctx, run))
-	require.NoError(t, app.store.AgentSteps.Insert(ctx, &store.AgentStep{
-		ProjectID: uuid.MustParse(projectID), AgentRunID: run.ID, StepIndex: 1, StepType: "think",
+	pid := uuid.MustParse(ts.projID)
+	run := &store.AgentRun{ProjectID: pid, AgentName: "a", Status: "running"}
+	require.NoError(t, ts.app.store.AgentRuns.Insert(ctx, run))
+	require.NoError(t, ts.app.store.AgentSteps.Insert(ctx, &store.AgentStep{
+		ProjectID: pid, AgentRunID: run.ID, StepIndex: 1, StepType: "think",
 	}))
 	var body struct{ Data []store.StepTypeCount `json:"data"` }
-	resp, raw := doJSON(t, http.MethodGet, srv.URL+"/v1/agent/steps/distribution", key, nil, &body)
+	resp, raw := doJSON(t, http.MethodGet, ts.srv.URL+"/v1/projects/"+ts.projID+"/agent/steps/distribution", ts.apiKey, nil, &body)
 	require.Equal(t, http.StatusOK, resp.StatusCode, "body=%s", raw)
 	require.NotEmpty(t, body.Data)
 }

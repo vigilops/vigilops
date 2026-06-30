@@ -15,7 +15,7 @@ type ingestMetricPayload struct {
 	Host       string          `json:"host"        validate:"required,min=1,max=200"`
 	MetricName string          `json:"metric_name" validate:"required,min=1,max=200"`
 	Value      float64         `json:"value"       validate:"required"`
-	Labels     json.RawMessage `json:"labels,omitempty"`
+	Labels     json.RawMessage `json:"labels,omitempty" swaggertype:"object"`
 }
 
 // IngestMetric godoc

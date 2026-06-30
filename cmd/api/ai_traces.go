@@ -25,7 +25,7 @@ type ingestAIPayload struct {
 	ErrorMessage *string         `json:"error_message,omitempty" validate:"omitempty,max=2000"`
 	RequestID    *string         `json:"request_id,omitempty"    validate:"omitempty,max=200"`
 	AgentRunID   *uuid.UUID      `json:"agent_run_id,omitempty"`
-	Metadata     json.RawMessage `json:"metadata,omitempty"`
+	Metadata     json.RawMessage `json:"metadata,omitempty" swaggertype:"object"`
 }
 
 // IngestAI godoc

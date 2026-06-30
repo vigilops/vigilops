@@ -9,35 +9,35 @@ import (
 )
 
 func TestIngestAI_requiresAuth(t *testing.T) {
-	srv, _, _, _ := newTestServer(t)
-	resp, _ := doJSON(t, http.MethodPost, srv.URL+"/v1/ingest/ai", "",
+	ts := newTestServer(t)
+	resp, _ := doJSON(t, http.MethodPost, ts.srv.URL+"/v1/ingest/ai", "",
 		map[string]any{"model": "m", "status": "success"}, nil)
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 }
 
 func TestIngestAI_validatesStatusEnum(t *testing.T) {
-	srv, _, key, _ := newTestServer(t)
-	resp, _ := doJSON(t, http.MethodPost, srv.URL+"/v1/ingest/ai", key,
+	ts := newTestServer(t)
+	resp, _ := doJSON(t, http.MethodPost, ts.srv.URL+"/v1/ingest/ai", ts.apiKey,
 		map[string]any{"model": "m", "status": "weird"}, nil)
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
 func TestIngestAI_validInsertReturns201WithID(t *testing.T) {
-	srv, _, key, _ := newTestServer(t)
+	ts := newTestServer(t)
 	var body struct {
 		Data struct {
 			ID string `json:"id"`
 		} `json:"data"`
 	}
-	resp, raw := doJSON(t, http.MethodPost, srv.URL+"/v1/ingest/ai", key,
+	resp, raw := doJSON(t, http.MethodPost, ts.srv.URL+"/v1/ingest/ai", ts.apiKey,
 		map[string]any{"model": "m", "status": "success"}, &body)
 	require.Equal(t, http.StatusCreated, resp.StatusCode, "body=%s", raw)
 	assert.NotEmpty(t, body.Data.ID)
 }
 
 func TestIngestEvents_validInsertReturns201(t *testing.T) {
-	srv, _, key, _ := newTestServer(t)
-	resp, _ := doJSON(t, http.MethodPost, srv.URL+"/v1/ingest/events", key,
+	ts := newTestServer(t)
+	resp, _ := doJSON(t, http.MethodPost, ts.srv.URL+"/v1/ingest/events", ts.apiKey,
 		map[string]any{
 			"service": "api", "method": "GET", "path": "/x",
 			"status_code": 200, "duration_ms": 12,
@@ -46,8 +46,8 @@ func TestIngestEvents_validInsertReturns201(t *testing.T) {
 }
 
 func TestIngestEvents_rejectsInvalidMethod(t *testing.T) {
-	srv, _, key, _ := newTestServer(t)
-	resp, _ := doJSON(t, http.MethodPost, srv.URL+"/v1/ingest/events", key,
+	ts := newTestServer(t)
+	resp, _ := doJSON(t, http.MethodPost, ts.srv.URL+"/v1/ingest/events", ts.apiKey,
 		map[string]any{
 			"service": "api", "method": "WRONG", "path": "/x",
 			"status_code": 200, "duration_ms": 1,
@@ -56,21 +56,21 @@ func TestIngestEvents_rejectsInvalidMethod(t *testing.T) {
 }
 
 func TestIngestMetrics_validInsertReturns201(t *testing.T) {
-	srv, _, key, _ := newTestServer(t)
-	resp, _ := doJSON(t, http.MethodPost, srv.URL+"/v1/ingest/metrics", key,
+	ts := newTestServer(t)
+	resp, _ := doJSON(t, http.MethodPost, ts.srv.URL+"/v1/ingest/metrics", ts.apiKey,
 		map[string]any{"host": "h1", "metric_name": "cpu", "value": 42.5}, nil)
 	assert.Equal(t, http.StatusCreated, resp.StatusCode)
 }
 
 func TestIngestAgentRunStart_returns201WithIDAndTimestamp(t *testing.T) {
-	srv, _, key, _ := newTestServer(t)
+	ts := newTestServer(t)
 	var body struct {
 		Data struct {
 			ID        string `json:"id"`
 			Timestamp string `json:"timestamp"`
 		} `json:"data"`
 	}
-	resp, raw := doJSON(t, http.MethodPost, srv.URL+"/v1/ingest/agent/runs", key,
+	resp, raw := doJSON(t, http.MethodPost, ts.srv.URL+"/v1/ingest/agent/runs", ts.apiKey,
 		map[string]any{"agent_name": "a", "input": "x"}, &body)
 	require.Equal(t, http.StatusCreated, resp.StatusCode, "body=%s", raw)
 	assert.NotEmpty(t, body.Data.ID)
@@ -78,18 +78,17 @@ func TestIngestAgentRunStart_returns201WithIDAndTimestamp(t *testing.T) {
 }
 
 func TestIngestAgentStep_validReturns201(t *testing.T) {
-	srv, _, key, _ := newTestServer(t)
+	ts := newTestServer(t)
 
-	// Start a run first.
 	var run struct {
 		Data struct {
 			ID string `json:"id"`
 		} `json:"data"`
 	}
-	doJSON(t, http.MethodPost, srv.URL+"/v1/ingest/agent/runs", key,
+	doJSON(t, http.MethodPost, ts.srv.URL+"/v1/ingest/agent/runs", ts.apiKey,
 		map[string]any{"agent_name": "a"}, &run)
 
-	resp, _ := doJSON(t, http.MethodPost, srv.URL+"/v1/ingest/agent/steps", key,
+	resp, _ := doJSON(t, http.MethodPost, ts.srv.URL+"/v1/ingest/agent/steps", ts.apiKey,
 		map[string]any{
 			"agent_run_id": run.Data.ID,
 			"step_index":   1,
@@ -99,8 +98,8 @@ func TestIngestAgentStep_validReturns201(t *testing.T) {
 }
 
 func TestIngestAgentStep_rejectsBadStepType(t *testing.T) {
-	srv, _, key, _ := newTestServer(t)
-	resp, _ := doJSON(t, http.MethodPost, srv.URL+"/v1/ingest/agent/steps", key,
+	ts := newTestServer(t)
+	resp, _ := doJSON(t, http.MethodPost, ts.srv.URL+"/v1/ingest/agent/steps", ts.apiKey,
 		map[string]any{
 			"agent_run_id": "00000000-0000-0000-0000-000000000000",
 			"step_index":   1,
@@ -110,7 +109,7 @@ func TestIngestAgentStep_rejectsBadStepType(t *testing.T) {
 }
 
 func TestIngestAgentRunFinish_204(t *testing.T) {
-	srv, _, key, _ := newTestServer(t)
+	ts := newTestServer(t)
 
 	var run struct {
 		Data struct {
@@ -118,11 +117,11 @@ func TestIngestAgentRunFinish_204(t *testing.T) {
 			Timestamp string `json:"timestamp"`
 		} `json:"data"`
 	}
-	doJSON(t, http.MethodPost, srv.URL+"/v1/ingest/agent/runs", key,
+	doJSON(t, http.MethodPost, ts.srv.URL+"/v1/ingest/agent/runs", ts.apiKey,
 		map[string]any{"agent_name": "a"}, &run)
 
 	resp, _ := doJSON(t, http.MethodPost,
-		srv.URL+"/v1/ingest/agent/runs/"+run.Data.ID+"/finish", key,
+		ts.srv.URL+"/v1/ingest/agent/runs/"+run.Data.ID+"/finish", ts.apiKey,
 		map[string]any{
 			"timestamp":          run.Data.Timestamp,
 			"status":             "completed",
@@ -134,9 +133,9 @@ func TestIngestAgentRunFinish_204(t *testing.T) {
 }
 
 func TestIngestAgentRunFinish_404OnUnknownRun(t *testing.T) {
-	srv, _, key, _ := newTestServer(t)
+	ts := newTestServer(t)
 	resp, _ := doJSON(t, http.MethodPost,
-		srv.URL+"/v1/ingest/agent/runs/00000000-0000-0000-0000-000000000000/finish", key,
+		ts.srv.URL+"/v1/ingest/agent/runs/00000000-0000-0000-0000-000000000000/finish", ts.apiKey,
 		map[string]any{
 			"timestamp":    "2026-06-08T00:00:00Z",
 			"status":       "completed",

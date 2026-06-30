@@ -1,5 +1,26 @@
 basePath: /v1
 definitions:
+  main.authUserResponse:
+    properties:
+      organizations:
+        items:
+          $ref: '#/definitions/store.Organization'
+        type: array
+      user:
+        $ref: '#/definitions/store.User'
+    type: object
+  main.createInvitePayload:
+    properties:
+      email:
+        type: string
+      role:
+        enum:
+        - admin
+        - member
+        type: string
+    required:
+    - email
+    type: object
   main.createKeyPayload:
     properties:
       name:
@@ -16,7 +37,6 @@ definitions:
       id:
         type: string
       key:
-        description: plaintext, returned ONCE on creation
         type: string
       name:
         type: string
@@ -33,6 +53,50 @@ definitions:
     - name
     type: object
   main.ingestAIPayload:
+    properties:
+      agent_run_id:
+        type: string
+      cost_usd:
+        minimum: 0
+        type: number
+      error_message:
+        maxLength: 2000
+        type: string
+      input_tokens:
+        minimum: 0
+        type: integer
+      latency_ms:
+        minimum: 0
+        type: integer
+      metadata:
+        type: object
+      model:
+        maxLength: 200
+        minLength: 1
+        type: string
+      output_tokens:
+        minimum: 0
+        type: integer
+      provider:
+        maxLength: 50
+        type: string
+      request_id:
+        maxLength: 200
+        type: string
+      status:
+        enum:
+        - success
+        - error
+        - timeout
+        type: string
+      timestamp:
+        type: string
+      total_tokens:
+        minimum: 0
+        type: integer
+    required:
+    - model
+    - status
     type: object
   main.ingestAgentRunFinishPayload:
     properties:
@@ -77,12 +141,136 @@ definitions:
     - timestamp
     type: object
   main.ingestAgentRunStartPayload:
+    properties:
+      agent_name:
+        maxLength: 200
+        minLength: 1
+        type: string
+      input:
+        maxLength: 10000
+        type: string
+      metadata:
+        type: object
+      timestamp:
+        type: string
+    required:
+    - agent_name
     type: object
   main.ingestAgentStepPayload:
+    properties:
+      agent_run_id:
+        type: string
+      content:
+        maxLength: 100000
+        type: string
+      cost_usd:
+        minimum: 0
+        type: number
+      metadata:
+        type: object
+      step_index:
+        minimum: 0
+        type: integer
+      step_type:
+        enum:
+        - think
+        - tool_call
+        - tool_result
+        - replan
+        type: string
+      timestamp:
+        type: string
+      tokens:
+        minimum: 0
+        type: integer
+      tool_input:
+        type: object
+      tool_latency_ms:
+        minimum: 0
+        type: integer
+      tool_name:
+        maxLength: 200
+        type: string
+      tool_output:
+        type: object
+      tool_success:
+        type: boolean
+    required:
+    - agent_run_id
+    - step_type
     type: object
   main.ingestEventPayload:
+    properties:
+      duration_ms:
+        minimum: 0
+        type: integer
+      error:
+        maxLength: 2000
+        type: string
+      ip:
+        type: string
+      metadata:
+        type: object
+      method:
+        enum:
+        - GET
+        - POST
+        - PUT
+        - PATCH
+        - DELETE
+        - OPTIONS
+        - HEAD
+        type: string
+      path:
+        maxLength: 500
+        minLength: 1
+        type: string
+      request_size_bytes:
+        minimum: 0
+        type: integer
+      response_size_bytes:
+        minimum: 0
+        type: integer
+      service:
+        maxLength: 100
+        minLength: 1
+        type: string
+      status_code:
+        maximum: 599
+        minimum: 100
+        type: integer
+      timestamp:
+        type: string
+      user_agent:
+        maxLength: 500
+        type: string
+    required:
+    - duration_ms
+    - method
+    - path
+    - service
+    - status_code
     type: object
   main.ingestMetricPayload:
+    properties:
+      host:
+        maxLength: 200
+        minLength: 1
+        type: string
+      labels:
+        type: object
+      metric_name:
+        maxLength: 200
+        minLength: 1
+        type: string
+      timestamp:
+        type: string
+      value:
+        type: number
+    required:
+    - host
+    - metric_name
+    - value
     type: object
   main.ingestResponse:
     properties:
@@ -90,6 +278,51 @@ definitions:
         type: string
       timestamp:
         type: string
+    type: object
+  main.loginPayload:
+    properties:
+      email:
+        type: string
+      password:
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  main.registerPayload:
+    properties:
+      email:
+        maxLength: 255
+        type: string
+      name:
+        maxLength: 100
+        type: string
+      password:
+        maxLength: 200
+        minLength: 8
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  main.updateOrgPayload:
+    properties:
+      name:
+        maxLength: 100
+        minLength: 1
+        type: string
+    required:
+    - name
+    type: object
+  main.updateRolePayload:
+    properties:
+      role:
+        enum:
+        - admin
+        - member
+        type: string
+    required:
+    - role
     type: object
   store.APIKey:
     properties:
@@ -199,6 +432,47 @@ definitions:
       tool_name:
         type: string
     type: object
+  store.MemberWithUser:
+    properties:
+      created_at:
+        type: string
+      email:
+        type: string
+      name:
+        type: string
+      organization_id:
+        type: string
+      role:
+        type: string
+      user_id:
+        type: string
+    type: object
+  store.Organization:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+    type: object
+  store.OrganizationInvite:
+    properties:
+      accepted_at:
+        type: string
+      created_at:
+        type: string
+      email:
+        type: string
+      expires_at:
+        type: string
+      id:
+        type: string
+      organization_id:
+        type: string
+      role:
+        type: string
+    type: object
   store.Project:
     properties:
       created_at:
@@ -206,6 +480,8 @@ definitions:
       id:
         type: string
       name:
+        type: string
+      organization_id:
         type: string
     type: object
   store.RunBucket:
@@ -310,24 +586,257 @@ definitions:
       tool_name:
         type: string
     type: object
+  store.User:
+    properties:
+      created_at:
+        type: string
+      email:
+        type: string
+      id:
+        type: string
+      is_verified:
+        type: boolean
+      name:
+        type: string
+      verified_at:
+        type: string
+    type: object
 info:
   contact: {}
   description: Unified observability platform for AI agents, APIs, and infrastructure.
   title: Keelwave API
   version: 0.0.1
 paths:
-  /admin/keys/{keyID}:
-    delete:
+  /admin/orgs:
+    post:
       consumes:
       - application/json
-      description: Revokes an API key by UUID. Subsequent requests using this key
-        will return 401.
       parameters:
-      - description: Key UUID
+      - description: name (string, required)
+        in: body
+        name: payload
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/store.Organization'
+        "400":
+          description: Bad Request
+          schema: {}
+        "500":
+          description: Internal Server Error
+          schema: {}
+      summary: Create an organization
+      tags:
+      - admin/orgs
+  /admin/orgs/{orgID}:
+    delete:
+      description: Permanently deletes the org and all its projects, keys, and ingest
+        data.
+      parameters:
+      - description: Organization UUID
         in: path
-        name: keyID
+        name: orgID
         required: true
         type: string
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema: {}
+        "403":
+          description: Forbidden
+          schema: {}
+        "404":
+          description: Not Found
+          schema: {}
+      summary: Delete an organization
+      tags:
+      - admin/orgs
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Organization UUID
+        in: path
+        name: orgID
+        required: true
+        type: string
+      - description: Update payload
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/main.updateOrgPayload'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/store.Organization'
+        "400":
+          description: Bad Request
+          schema: {}
+        "403":
+          description: Forbidden
+          schema: {}
+        "404":
+          description: Not Found
+          schema: {}
+      summary: Rename an organization
+      tags:
+      - admin/orgs
+  /admin/orgs/{orgID}/invites:
+    get:
+      parameters:
+      - description: Organization UUID
+        in: path
+        name: orgID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/store.OrganizationInvite'
+            type: array
+      summary: List pending invites for an organization
+      tags:
+      - admin/invites
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Organization UUID
+        in: path
+        name: orgID
+        required: true
+        type: string
+      - description: Invite payload
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/main.createInvitePayload'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/store.OrganizationInvite'
+        "400":
+          description: Bad Request
+          schema: {}
+        "403":
+          description: Forbidden
+          schema: {}
+      summary: Invite a user to an organization
+      tags:
+      - admin/invites
+  /admin/orgs/{orgID}/invites/{inviteID}:
+    delete:
+      parameters:
+      - description: Organization UUID
+        in: path
+        name: orgID
+        required: true
+        type: string
+      - description: Invite UUID
+        in: path
+        name: inviteID
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+      summary: Cancel an invite
+      tags:
+      - admin/invites
+  /admin/orgs/{orgID}/members:
+    get:
+      parameters:
+      - description: Organization UUID
+        in: path
+        name: orgID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/store.MemberWithUser'
+            type: array
+        "403":
+          description: Forbidden
+          schema: {}
+      summary: List org members
+      tags:
+      - admin/members
+  /admin/orgs/{orgID}/members/{userID}:
+    delete:
+      description: Admin+. Cannot remove an owner or yourself.
+      parameters:
+      - description: Organization UUID
+        in: path
+        name: orgID
+        required: true
+        type: string
+      - description: Member user UUID
+        in: path
+        name: userID
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema: {}
+        "403":
+          description: Forbidden
+          schema: {}
+        "404":
+          description: Not Found
+          schema: {}
+      summary: Remove a member from the org
+      tags:
+      - admin/members
+  /admin/orgs/{orgID}/members/{userID}/role:
+    patch:
+      consumes:
+      - application/json
+      description: Owner only. Cannot change an owner's role or promote to owner.
+      parameters:
+      - description: Organization UUID
+        in: path
+        name: orgID
+        required: true
+        type: string
+      - description: Member user UUID
+        in: path
+        name: userID
+        required: true
+        type: string
+      - description: Role payload
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/main.updateRolePayload'
       produces:
       - application/json
       responses:
@@ -336,20 +845,23 @@ paths:
         "400":
           description: Bad Request
           schema: {}
+        "403":
+          description: Forbidden
+          schema: {}
         "404":
           description: Not Found
           schema: {}
-        "500":
-          description: Internal Server Error
-          schema: {}
-      summary: Deletes an API key
+      summary: Update a member's role
       tags:
-      - admin/keys
-  /admin/projects:
+      - admin/members
+  /admin/orgs/{orgID}/projects:
     get:
-      consumes:
-      - application/json
-      description: Returns all projects ordered by created_at desc.
+      parameters:
+      - description: Organization UUID
+        in: path
+        name: orgID
+        required: true
+        type: string
       produces:
       - application/json
       responses:
@@ -362,14 +874,19 @@ paths:
         "500":
           description: Internal Server Error
           schema: {}
-      summary: Lists projects
+      summary: Lists projects in an org
       tags:
       - admin/projects
     post:
       consumes:
       - application/json
-      description: Creates a tenant project; all ingest rows are scoped by project_id.
+      description: Creates a tenant project scoped to the org. Requires admin role.
       parameters:
+      - description: Organization UUID
+        in: path
+        name: orgID
+        required: true
+        type: string
       - description: Project payload
         in: body
         name: payload
@@ -386,25 +903,29 @@ paths:
         "400":
           description: Bad Request
           schema: {}
+        "403":
+          description: Forbidden
+          schema: {}
         "500":
           description: Internal Server Error
           schema: {}
       summary: Creates a project
       tags:
       - admin/projects
-  /admin/projects/{projectID}:
+  /admin/orgs/{orgID}/projects/{projectID}:
     delete:
-      consumes:
-      - application/json
       description: Deletes a project and cascades to its api_keys and ingest rows.
       parameters:
+      - description: Organization UUID
+        in: path
+        name: orgID
+        required: true
+        type: string
       - description: Project UUID
         in: path
         name: projectID
         required: true
         type: string
-      produces:
-      - application/json
       responses:
         "204":
           description: No Content
@@ -421,10 +942,12 @@ paths:
       tags:
       - admin/projects
     get:
-      consumes:
-      - application/json
-      description: Fetches a project by UUID.
       parameters:
+      - description: Organization UUID
+        in: path
+        name: orgID
+        required: true
+        type: string
       - description: Project UUID
         in: path
         name: projectID
@@ -449,13 +972,14 @@ paths:
       summary: Fetches a project
       tags:
       - admin/projects
-  /admin/projects/{projectID}/keys:
+  /admin/orgs/{orgID}/projects/{projectID}/keys:
     get:
-      consumes:
-      - application/json
-      description: Returns all API keys for a project ordered by created_at desc.
-        Plaintext is never returned; only metadata and hash-derived ID.
       parameters:
+      - description: Organization UUID
+        in: path
+        name: orgID
+        required: true
+        type: string
       - description: Project UUID
         in: path
         name: projectID
@@ -473,18 +997,26 @@ paths:
         "400":
           description: Bad Request
           schema: {}
+        "404":
+          description: Not Found
+          schema: {}
         "500":
           description: Internal Server Error
           schema: {}
-      summary: Lists API keys
+      summary: Lists API keys for a project
       tags:
       - admin/keys
     post:
       consumes:
       - application/json
       description: Generates a new API key for a project. Plaintext key is returned
-        ONCE in the response; only the SHA-256 hash is stored.
+        ONCE. Requires admin role.
       parameters:
+      - description: Organization UUID
+        in: path
+        name: orgID
+        required: true
+        type: string
       - description: Project UUID
         in: path
         name: projectID
@@ -513,6 +1045,41 @@ paths:
           description: Internal Server Error
           schema: {}
       summary: Creates an API key
+      tags:
+      - admin/keys
+  /admin/orgs/{orgID}/projects/{projectID}/keys/{keyID}:
+    delete:
+      description: Revokes an API key. Subsequent requests using this key will return
+        401. Requires admin role.
+      parameters:
+      - description: Organization UUID
+        in: path
+        name: orgID
+        required: true
+        type: string
+      - description: Project UUID
+        in: path
+        name: projectID
+        required: true
+        type: string
+      - description: Key UUID
+        in: path
+        name: keyID
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema: {}
+        "404":
+          description: Not Found
+          schema: {}
+        "500":
+          description: Internal Server Error
+          schema: {}
+      summary: Deletes an API key
       tags:
       - admin/keys
   /agent/health:
@@ -857,6 +1424,198 @@ paths:
       summary: Per-tool usage analytics for the calling project
       tags:
       - agent
+  /auth/invites/{token}:
+    get:
+      parameters:
+      - description: Invite token
+        in: path
+        name: token
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/store.OrganizationInvite'
+      summary: Get invite info by token (public — for the accept page)
+      tags:
+      - auth
+  /auth/invites/{token}/accept:
+    put:
+      parameters:
+      - description: Invite token
+        in: path
+        name: token
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+      summary: Accept an invite (requires session)
+      tags:
+      - auth
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Credentials
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/main.loginPayload'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.authUserResponse'
+        "400":
+          description: Bad Request
+          schema: {}
+        "401":
+          description: Unauthorized
+          schema: {}
+        "500":
+          description: Internal Server Error
+          schema: {}
+      summary: Log in with email + password
+      tags:
+      - auth
+  /auth/logout:
+    post:
+      responses:
+        "204":
+          description: No Content
+        "500":
+          description: Internal Server Error
+          schema: {}
+      summary: End the current session
+      tags:
+      - auth
+  /auth/me:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.authUserResponse'
+        "401":
+          description: Unauthorized
+          schema: {}
+        "500":
+          description: Internal Server Error
+          schema: {}
+      summary: Get the current user and their organizations
+      tags:
+      - auth
+  /auth/oauth/{provider}/callback:
+    get:
+      parameters:
+      - description: OAuth provider (google, github)
+        in: path
+        name: provider
+        required: true
+        type: string
+      - description: Authorization code
+        in: query
+        name: code
+        required: true
+        type: string
+      - description: CSRF state
+        in: query
+        name: state
+        required: true
+        type: string
+      responses:
+        "307":
+          description: Temporary Redirect
+        "400":
+          description: Bad Request
+          schema: {}
+        "500":
+          description: Internal Server Error
+          schema: {}
+      summary: OAuth provider callback — issues session and redirects to dashboard
+      tags:
+      - auth
+  /auth/oauth/{provider}/start:
+    get:
+      parameters:
+      - description: OAuth provider (google, github)
+        in: path
+        name: provider
+        required: true
+        type: string
+      - description: Post-login redirect path
+        in: query
+        name: redirect
+        type: string
+      responses:
+        "307":
+          description: Temporary Redirect
+        "404":
+          description: Not Found
+          schema: {}
+      summary: Initiate OAuth login flow
+      tags:
+      - auth
+  /auth/register:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Registration payload
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/main.registerPayload'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/main.authUserResponse'
+        "400":
+          description: Bad Request
+          schema: {}
+        "409":
+          description: Conflict
+          schema: {}
+        "500":
+          description: Internal Server Error
+          schema: {}
+      summary: Register a new user
+      tags:
+      - auth
+  /auth/verify-email/{token}:
+    get:
+      parameters:
+      - description: Verification token
+        in: path
+        name: token
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema: {}
+        "404":
+          description: Not Found
+          schema: {}
+      summary: Verify email via token from the verification link
+      tags:
+      - auth
   /health:
     get:
       consumes:

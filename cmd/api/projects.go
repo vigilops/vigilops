@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -17,16 +16,24 @@ type createProjectPayload struct {
 // CreateProject godoc
 //
 //	@Summary		Creates a project
-//	@Description	Creates a tenant project; all ingest rows are scoped by project_id.
+//	@Description	Creates a tenant project scoped to the org. Requires admin role.
 //	@Tags			admin/projects
 //	@Accept			json
 //	@Produce		json
+//	@Param			orgID	path		string					true	"Organization UUID"
 //	@Param			payload	body		createProjectPayload	true	"Project payload"
 //	@Success		201		{object}	store.Project
 //	@Failure		400		{object}	error
+//	@Failure		403		{object}	error
 //	@Failure		500		{object}	error
-//	@Router			/admin/projects [post]
+//	@Router			/admin/orgs/{orgID}/projects [post]
 func (app *application) createProjectHandler(w http.ResponseWriter, r *http.Request) {
+	orgID, err := parseUUIDParam(r, "orgID")
+	if err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
 	var payload createProjectPayload
 	if err := readJSON(w, r, &payload); err != nil {
 		app.badRequestResponse(w, r, err)
@@ -38,7 +45,7 @@ func (app *application) createProjectHandler(w http.ResponseWriter, r *http.Requ
 	}
 
 	p := &store.Project{Name: payload.Name}
-	if err := app.store.Projects.Create(r.Context(), p); err != nil {
+	if err := app.store.Projects.Create(r.Context(), p, orgID); err != nil {
 		app.internalServerError(w, r, err)
 		return
 	}
@@ -50,16 +57,21 @@ func (app *application) createProjectHandler(w http.ResponseWriter, r *http.Requ
 
 // ListProjects godoc
 //
-//	@Summary		Lists projects
-//	@Description	Returns all projects ordered by created_at desc.
-//	@Tags			admin/projects
-//	@Accept			json
-//	@Produce		json
-//	@Success		200	{array}		store.Project
-//	@Failure		500	{object}	error
-//	@Router			/admin/projects [get]
+//	@Summary	Lists projects in an org
+//	@Tags		admin/projects
+//	@Produce	json
+//	@Param		orgID	path		string	true	"Organization UUID"
+//	@Success	200		{array}		store.Project
+//	@Failure	500		{object}	error
+//	@Router		/admin/orgs/{orgID}/projects [get]
 func (app *application) listProjectsHandler(w http.ResponseWriter, r *http.Request) {
-	projects, err := app.store.Projects.List(r.Context())
+	orgID, err := parseUUIDParam(r, "orgID")
+	if err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	projects, err := app.store.Projects.ListByOrg(r.Context(), orgID)
 	if err != nil {
 		app.internalServerError(w, r, err)
 		return
@@ -71,18 +83,22 @@ func (app *application) listProjectsHandler(w http.ResponseWriter, r *http.Reque
 
 // GetProject godoc
 //
-//	@Summary		Fetches a project
-//	@Description	Fetches a project by UUID.
-//	@Tags			admin/projects
-//	@Accept			json
-//	@Produce		json
-//	@Param			projectID	path		string	true	"Project UUID"
-//	@Success		200			{object}	store.Project
-//	@Failure		400			{object}	error
-//	@Failure		404			{object}	error
-//	@Failure		500			{object}	error
-//	@Router			/admin/projects/{projectID} [get]
+//	@Summary	Fetches a project
+//	@Tags		admin/projects
+//	@Produce	json
+//	@Param		orgID		path		string	true	"Organization UUID"
+//	@Param		projectID	path		string	true	"Project UUID"
+//	@Success	200			{object}	store.Project
+//	@Failure	400			{object}	error
+//	@Failure	404			{object}	error
+//	@Failure	500			{object}	error
+//	@Router		/admin/orgs/{orgID}/projects/{projectID} [get]
 func (app *application) getProjectHandler(w http.ResponseWriter, r *http.Request) {
+	orgID, err := parseUUIDParam(r, "orgID")
+	if err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
 	id, err := parseUUIDParam(r, "projectID")
 	if err != nil {
 		app.badRequestResponse(w, r, err)
@@ -91,12 +107,16 @@ func (app *application) getProjectHandler(w http.ResponseWriter, r *http.Request
 
 	p, err := app.store.Projects.GetByID(r.Context(), id)
 	if err != nil {
-		switch {
-		case errors.Is(err, store.ErrNotFound):
+		switch err {
+		case store.ErrNotFound:
 			app.notFoundResponse(w, r, err)
 		default:
 			app.internalServerError(w, r, err)
 		}
+		return
+	}
+	if p.OrganizationID != orgID {
+		app.notFoundResponse(w, r, store.ErrNotFound)
 		return
 	}
 
@@ -110,24 +130,43 @@ func (app *application) getProjectHandler(w http.ResponseWriter, r *http.Request
 //	@Summary		Deletes a project
 //	@Description	Deletes a project and cascades to its api_keys and ingest rows.
 //	@Tags			admin/projects
-//	@Accept			json
-//	@Produce		json
+//	@Param			orgID		path	string	true	"Organization UUID"
 //	@Param			projectID	path	string	true	"Project UUID"
 //	@Success		204
 //	@Failure		400	{object}	error
 //	@Failure		404	{object}	error
 //	@Failure		500	{object}	error
-//	@Router			/admin/projects/{projectID} [delete]
+//	@Router			/admin/orgs/{orgID}/projects/{projectID} [delete]
 func (app *application) deleteProjectHandler(w http.ResponseWriter, r *http.Request) {
+	orgID, err := parseUUIDParam(r, "orgID")
+	if err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
 	id, err := parseUUIDParam(r, "projectID")
 	if err != nil {
 		app.badRequestResponse(w, r, err)
 		return
 	}
 
+	p, err := app.store.Projects.GetByID(r.Context(), id)
+	if err != nil {
+		switch err {
+		case store.ErrNotFound:
+			app.notFoundResponse(w, r, err)
+		default:
+			app.internalServerError(w, r, err)
+		}
+		return
+	}
+	if p.OrganizationID != orgID {
+		app.notFoundResponse(w, r, store.ErrNotFound)
+		return
+	}
+
 	if err := app.store.Projects.Delete(r.Context(), id); err != nil {
-		switch {
-		case errors.Is(err, store.ErrNotFound):
+		switch err {
+		case store.ErrNotFound:
 			app.notFoundResponse(w, r, err)
 		default:
 			app.internalServerError(w, r, err)

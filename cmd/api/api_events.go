@@ -25,7 +25,7 @@ type ingestEventPayload struct {
 	IP                *string         `json:"ip,omitempty"        validate:"omitempty,ip"`
 	UserAgent         *string         `json:"user_agent,omitempty" validate:"omitempty,max=500"`
 	Error             *string         `json:"error,omitempty"     validate:"omitempty,max=2000"`
-	Metadata          json.RawMessage `json:"metadata,omitempty"`
+	Metadata          json.RawMessage `json:"metadata,omitempty" swaggertype:"object"`
 }
 
 // IngestEvent godoc

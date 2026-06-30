@@ -15,12 +15,11 @@ import (
 )
 
 func TestListRunsHandler_returns200WithEnvelopedArray(t *testing.T) {
-	srv, projectID, key, app := newTestServer(t)
+	ts := newTestServer(t)
 	ctx := context.Background()
 
-	// Seed a run for the test project.
-	require.NoError(t, app.store.AgentRuns.Insert(ctx, &store.AgentRun{
-		ProjectID: uuid.MustParse(projectID),
+	require.NoError(t, ts.app.store.AgentRuns.Insert(ctx, &store.AgentRun{
+		ProjectID: uuid.MustParse(ts.projID),
 		AgentName: "list-handler-test",
 		Status:    "running",
 	}))
@@ -33,7 +32,7 @@ func TestListRunsHandler_returns200WithEnvelopedArray(t *testing.T) {
 			Timestamp time.Time `json:"timestamp"`
 		} `json:"data"`
 	}
-	resp, raw := doJSON(t, http.MethodGet, srv.URL+"/v1/agent/runs", key, nil, &body)
+	resp, raw := doJSON(t, http.MethodGet, ts.srv.URL+"/v1/projects/"+ts.projID+"/agent/runs/", ts.apiKey, nil, &body)
 
 	require.Equal(t, http.StatusOK, resp.StatusCode, "body=%s", raw)
 	require.NotEmpty(t, body.Data, "expected at least one run")
@@ -41,41 +40,37 @@ func TestListRunsHandler_returns200WithEnvelopedArray(t *testing.T) {
 }
 
 func TestListRunsHandler_returns401WithoutKey(t *testing.T) {
-	srv, _, _, _ := newTestServer(t)
-	resp, _ := doJSON(t, http.MethodGet, srv.URL+"/v1/agent/runs", "", nil, nil)
+	ts := newTestServer(t)
+	resp, _ := doJSON(t, http.MethodGet, ts.srv.URL+"/v1/projects/"+ts.projID+"/agent/runs/", "", nil, nil)
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 }
 
 func TestGetRunHandler_returns404OnCrossTenantID(t *testing.T) {
-	srvA, _, keyA, appA := newTestServer(t)
-	srvB, projectIDB, _, appB := newTestServer(t)
+	tsA := newTestServer(t)
+	tsB := newTestServer(t)
 	ctx := context.Background()
 
-	// A run that lives in tenant B
-	runB := &store.AgentRun{ProjectID: uuid.MustParse(projectIDB), AgentName: "x", Status: "running"}
-	require.NoError(t, appB.store.AgentRuns.Insert(ctx, runB))
+	runB := &store.AgentRun{ProjectID: uuid.MustParse(tsB.projID), AgentName: "x", Status: "running"}
+	require.NoError(t, tsB.app.store.AgentRuns.Insert(ctx, runB))
 
-	// Tenant A queries it — must not see it.
-	url := fmt.Sprintf("%s/v1/agent/runs/%s?at=%s", srvA.URL, runB.ID, runB.Timestamp.UTC().Format(time.RFC3339Nano))
+	url := fmt.Sprintf("%s/v1/projects/%s/agent/runs/%s?at=%s", tsA.srv.URL, tsA.projID, runB.ID, runB.Timestamp.UTC().Format(time.RFC3339Nano))
 	var body struct {
 		Error string `json:"error"`
 	}
-	resp, raw := doJSON(t, http.MethodGet, url, keyA, nil, &body)
+	resp, raw := doJSON(t, http.MethodGet, url, tsA.apiKey, nil, &body)
 
 	require.Equal(t, http.StatusNotFound, resp.StatusCode, "body=%s", raw)
 	assert.Equal(t, "not found", body.Error, "must be project-scoped not-found envelope, not chi 404")
-	_ = srvB
-	_ = appA
 }
 
 func TestRunHealthHandler_returns200WithRollup(t *testing.T) {
-	srv, projectID, key, app := newTestServer(t)
+	ts := newTestServer(t)
 	ctx := context.Background()
-	pid := uuid.MustParse(projectID)
+	pid := uuid.MustParse(ts.projID)
 
 	run := &store.AgentRun{ProjectID: pid, AgentName: "health-agent", Status: "running"}
-	require.NoError(t, app.store.AgentRuns.Insert(ctx, run))
-	require.NoError(t, app.store.AgentRuns.Finish(ctx, run.ID, run.Timestamp, store.AgentRunFinish{
+	require.NoError(t, ts.app.store.AgentRuns.Insert(ctx, run))
+	require.NoError(t, ts.app.store.AgentRuns.Finish(ctx, run.ID, run.Timestamp, store.AgentRunFinish{
 		Status:      "completed",
 		TotalTokens: 1000,
 	}))
@@ -83,7 +78,7 @@ func TestRunHealthHandler_returns200WithRollup(t *testing.T) {
 	var body struct {
 		Data []store.RunHealthRow `json:"data"`
 	}
-	resp, raw := doJSON(t, http.MethodGet, srv.URL+"/v1/agent/health", key, nil, &body)
+	resp, raw := doJSON(t, http.MethodGet, ts.srv.URL+"/v1/projects/"+ts.projID+"/agent/health", ts.apiKey, nil, &body)
 
 	require.Equal(t, http.StatusOK, resp.StatusCode, "body=%s", raw)
 	require.NotEmpty(t, body.Data)
@@ -101,26 +96,26 @@ func TestRunHealthHandler_returns200WithRollup(t *testing.T) {
 }
 
 func TestRunHealthHandler_returns401WithoutKey(t *testing.T) {
-	srv, _, _, _ := newTestServer(t)
-	resp, _ := doJSON(t, http.MethodGet, srv.URL+"/v1/agent/health", "", nil, nil)
+	ts := newTestServer(t)
+	resp, _ := doJSON(t, http.MethodGet, ts.srv.URL+"/v1/projects/"+ts.projID+"/agent/health", "", nil, nil)
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 }
 
 func TestRunsTimeseriesHandler_returns200Bucketed(t *testing.T) {
-	srv, projectID, key, app := newTestServer(t)
+	ts := newTestServer(t)
 	ctx := context.Background()
-	pid := uuid.MustParse(projectID)
+	pid := uuid.MustParse(ts.projID)
 
 	run := &store.AgentRun{ProjectID: pid, AgentName: "ts", Status: "running"}
-	require.NoError(t, app.store.AgentRuns.Insert(ctx, run))
-	require.NoError(t, app.store.AgentRuns.Finish(ctx, run.ID, run.Timestamp, store.AgentRunFinish{
+	require.NoError(t, ts.app.store.AgentRuns.Insert(ctx, run))
+	require.NoError(t, ts.app.store.AgentRuns.Finish(ctx, run.ID, run.Timestamp, store.AgentRunFinish{
 		Status: "completed",
 	}))
 
 	var body struct {
 		Data []store.RunBucket `json:"data"`
 	}
-	resp, raw := doJSON(t, http.MethodGet, srv.URL+"/v1/agent/runs/timeseries?bucket=1h", key, nil, &body)
+	resp, raw := doJSON(t, http.MethodGet, ts.srv.URL+"/v1/projects/"+ts.projID+"/agent/runs/timeseries?bucket=1h", ts.apiKey, nil, &body)
 
 	require.Equal(t, http.StatusOK, resp.StatusCode, "body=%s", raw)
 	require.NotEmpty(t, body.Data)
@@ -128,24 +123,24 @@ func TestRunsTimeseriesHandler_returns200Bucketed(t *testing.T) {
 }
 
 func TestRunsTimeseriesHandler_rejectsBadBucket(t *testing.T) {
-	srv, _, key, _ := newTestServer(t)
-	resp, _ := doJSON(t, http.MethodGet, srv.URL+"/v1/agent/runs/timeseries?bucket=99x", key, nil, nil)
+	ts := newTestServer(t)
+	resp, _ := doJSON(t, http.MethodGet, ts.srv.URL+"/v1/projects/"+ts.projID+"/agent/runs/timeseries?bucket=99x", ts.apiKey, nil, nil)
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
 func TestRunsTimeseriesHandler_returns401WithoutKey(t *testing.T) {
-	srv, _, _, _ := newTestServer(t)
-	resp, _ := doJSON(t, http.MethodGet, srv.URL+"/v1/agent/runs/timeseries", "", nil, nil)
+	ts := newTestServer(t)
+	resp, _ := doJSON(t, http.MethodGet, ts.srv.URL+"/v1/projects/"+ts.projID+"/agent/runs/timeseries", "", nil, nil)
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 }
 
 func TestSummaryHandler_returnsCurrentAndPrevious(t *testing.T) {
-	srv, projectID, key, app := newTestServer(t)
+	ts := newTestServer(t)
 	ctx := context.Background()
-	pid := uuid.MustParse(projectID)
+	pid := uuid.MustParse(ts.projID)
 	run := &store.AgentRun{ProjectID: pid, AgentName: "a", Status: "running"}
-	require.NoError(t, app.store.AgentRuns.Insert(ctx, run))
-	require.NoError(t, app.store.AgentRuns.Finish(ctx, run.ID, run.Timestamp, store.AgentRunFinish{
+	require.NoError(t, ts.app.store.AgentRuns.Insert(ctx, run))
+	require.NoError(t, ts.app.store.AgentRuns.Finish(ctx, run.ID, run.Timestamp, store.AgentRunFinish{
 		Status: "completed", TotalTokens: 1000, DurationMs: new(150),
 	}))
 	var body struct {
@@ -154,27 +149,27 @@ func TestSummaryHandler_returnsCurrentAndPrevious(t *testing.T) {
 			Previous store.RunSummary `json:"previous"`
 		} `json:"data"`
 	}
-	resp, raw := doJSON(t, http.MethodGet, srv.URL+"/v1/agent/summary", key, nil, &body)
+	resp, raw := doJSON(t, http.MethodGet, ts.srv.URL+"/v1/projects/"+ts.projID+"/agent/summary", ts.apiKey, nil, &body)
 	require.Equal(t, http.StatusOK, resp.StatusCode, "body=%s", raw)
 	assert.GreaterOrEqual(t, body.Data.Current.TotalRuns, 1)
 }
 
 func TestSummaryHandler_401WithoutKey(t *testing.T) {
-	srv, _, _, _ := newTestServer(t)
-	resp, _ := doJSON(t, http.MethodGet, srv.URL+"/v1/agent/summary", "", nil, nil)
+	ts := newTestServer(t)
+	resp, _ := doJSON(t, http.MethodGet, ts.srv.URL+"/v1/projects/"+ts.projID+"/agent/summary", "", nil, nil)
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 }
 
 func TestTerminationsHandler_returns200(t *testing.T) {
-	srv, projectID, key, app := newTestServer(t)
+	ts := newTestServer(t)
 	ctx := context.Background()
-	run := &store.AgentRun{ProjectID: uuid.MustParse(projectID), AgentName: "a", Status: "running"}
-	require.NoError(t, app.store.AgentRuns.Insert(ctx, run))
-	require.NoError(t, app.store.AgentRuns.Finish(ctx, run.ID, run.Timestamp, store.AgentRunFinish{
+	run := &store.AgentRun{ProjectID: uuid.MustParse(ts.projID), AgentName: "a", Status: "running"}
+	require.NoError(t, ts.app.store.AgentRuns.Insert(ctx, run))
+	require.NoError(t, ts.app.store.AgentRuns.Finish(ctx, run.ID, run.Timestamp, store.AgentRunFinish{
 		Status: "completed", TerminationReason: new("clean"),
 	}))
 	var body struct{ Data []store.TerminationCount `json:"data"` }
-	resp, raw := doJSON(t, http.MethodGet, srv.URL+"/v1/agent/runs/terminations", key, nil, &body)
+	resp, raw := doJSON(t, http.MethodGet, ts.srv.URL+"/v1/projects/"+ts.projID+"/agent/runs/terminations", ts.apiKey, nil, &body)
 	require.Equal(t, http.StatusOK, resp.StatusCode, "body=%s", raw)
 	require.NotEmpty(t, body.Data)
 }

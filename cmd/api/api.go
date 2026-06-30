@@ -11,6 +11,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/keelwave/keelwave/internal/batch"
+	"github.com/keelwave/keelwave/internal/mailer"
 	"github.com/keelwave/keelwave/internal/store"
 )
 
@@ -19,6 +20,7 @@ type application struct {
 	pool     *pgxpool.Pool
 	store    store.Storage
 	batchers *batch.Batchers
+	mailer   mailer.Client
 	srv      *http.Server
 	logger   *zap.SugaredLogger
 }
@@ -30,7 +32,33 @@ type config struct {
 	db              dbConfig
 	rateLimit       rateLimitConfig
 	batch           batchConfig
+	auth            authConfig
+	mail            mailConfig
 	shutdownTimeout time.Duration
+}
+
+type mailConfig struct {
+	apiKey    string
+	fromEmail string
+}
+
+type authConfig struct {
+	sessionTTL   time.Duration
+	cookieName   string
+	cookieSecure bool
+	publicURL    string
+	dashboardURL string
+	google       oauthProvider
+	github       oauthProvider
+}
+
+type oauthProvider struct {
+	clientID     string
+	clientSecret string
+}
+
+func (p oauthProvider) configured() bool {
+	return p.clientID != "" && p.clientSecret != ""
 }
 
 type dbConfig struct {
@@ -58,9 +86,9 @@ func (app *application) mount() *chi.Mux {
 	r.Use(middleware.Recoverer)
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   app.config.corsOrigins,
-		AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodDelete, http.MethodOptions},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-API-Key"},
-		AllowCredentials: false,
+		AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-API-Key", "X-Project-ID", "X-Org-ID"},
+		AllowCredentials: true,
 		MaxAge:           300,
 	}))
 	r.Use(middleware.Timeout(60 * time.Second))
@@ -70,9 +98,24 @@ func (app *application) mount() *chi.Mux {
 		r.Get("/openapi.json", app.openAPIHandler)
 		r.Get("/docs", app.docsHandler)
 
+		r.Route("/auth", func(r chi.Router) {
+			r.Post("/register", app.registerHandler)
+			r.Post("/login", app.loginHandler)
+			r.Get("/oauth/{provider}/start", app.oauthStartHandler)
+			r.Get("/oauth/{provider}/callback", app.oauthCallbackHandler)
+			r.Get("/invites/{token}", app.getInviteHandler)
+			r.Get("/verify-email/{token}", app.verifyEmailHandler)
+			r.Group(func(r chi.Router) {
+				r.Use(app.userAuthMiddleware)
+				r.Post("/logout", app.logoutHandler)
+				r.Get("/me", app.meHandler)
+				r.Put("/invites/{token}/accept", app.acceptInviteHandler)
+			})
+		})
+
 		r.Route("/ingest", func(r chi.Router) {
 			r.Use(app.ingestIPRateLimit())
-			r.Use(app.apiKeyAuth)
+			r.Use(app.apiKeyAuthMiddleware)
 			r.Use(app.ingestKeyRateLimit())
 			r.Post("/ai", app.ingestAIHandler)
 			r.Post("/events", app.ingestEventHandler)
@@ -85,40 +128,64 @@ func (app *application) mount() *chi.Mux {
 			})
 		})
 
-		r.Route("/agent", func(r chi.Router) {
-			r.Use(app.apiKeyAuth)
-			r.Get("/health", app.runHealthHandler)
-			r.Get("/tools/stats", app.toolStatsHandler)
-			r.Get("/summary", app.summaryHandler)
-			r.Get("/steps/distribution", app.stepDistributionHandler)
+		r.Route("/projects/{projectID}", func(r chi.Router) {
+			r.Route("/agent", func(r chi.Router) {
+				r.Use(app.queryAuthMiddleware)
+				r.Use(app.requireVerifiedMiddleware)
+				r.Get("/health", app.runHealthHandler)
+				r.Get("/tools/stats", app.toolStatsHandler)
+				r.Get("/summary", app.summaryHandler)
+				r.Get("/steps/distribution", app.stepDistributionHandler)
 
-			r.Route("/runs", func(r chi.Router) {
-				r.Get("/", app.listAgentRunsHandler)
-				r.Get("/timeseries", app.runsTimeseriesHandler)
-				r.Get("/terminations", app.terminationsHandler)
-				r.Get("/{runID}", app.getAgentRunHandler)
-				r.Get("/{runID}/steps", app.listAgentStepsHandler)
-				r.Get("/{runID}/loops", app.listAgentLoopsHandler)
+				r.Route("/runs", func(r chi.Router) {
+					r.Get("/", app.listAgentRunsHandler)
+					r.Get("/timeseries", app.runsTimeseriesHandler)
+					r.Get("/terminations", app.terminationsHandler)
+					r.Get("/{runID}", app.getAgentRunHandler)
+					r.Get("/{runID}/steps", app.listAgentStepsHandler)
+					r.Get("/{runID}/loops", app.listAgentLoopsHandler)
+				})
 			})
 		})
 
 		r.Route("/admin", func(r chi.Router) {
-			r.Route("/projects", func(r chi.Router) {
-				r.Post("/", app.createProjectHandler)
-				r.Get("/", app.listProjectsHandler)
+			r.Use(app.userAuthMiddleware)
+			r.Use(app.requireVerifiedMiddleware)
+			r.Post("/orgs", app.createOrgHandler)
 
-				r.Route("/{projectID}", func(r chi.Router) {
-					r.Get("/", app.getProjectHandler)
-					r.Delete("/", app.deleteProjectHandler)
+			r.Route("/orgs/{orgID}", func(r chi.Router) {
+				r.With(app.requireOrgRoleMiddleware(RoleLevelAdmin)).Patch("/", app.updateOrgHandler)
+				r.With(app.requireOrgRoleMiddleware(RoleLevelOwner)).Delete("/", app.deleteOrgHandler)
 
-					r.Route("/keys", func(r chi.Router) {
-						r.Post("/", app.createKeyHandler)
-						r.Get("/", app.listKeysHandler)
+				r.Route("/members", func(r chi.Router) {
+					r.With(app.requireOrgRoleMiddleware(RoleLevelMember)).Get("/", app.listMembersHandler)
+					r.With(app.requireOrgRoleMiddleware(RoleLevelOwner)).Patch("/{userID}/role", app.updateMemberRoleHandler)
+					r.With(app.requireOrgRoleMiddleware(RoleLevelAdmin)).Delete("/{userID}", app.removeMemberHandler)
+				})
+
+				r.Route("/invites", func(r chi.Router) {
+					r.Use(app.requireOrgRoleMiddleware(RoleLevelAdmin))
+					r.Post("/", app.createInviteHandler)
+					r.Get("/", app.listInvitesHandler)
+					r.Delete("/{inviteID}", app.deleteInviteHandler)
+				})
+
+				r.Route("/projects", func(r chi.Router) {
+					r.With(app.requireOrgRoleMiddleware(RoleLevelMember)).Get("/", app.listProjectsHandler)
+					r.With(app.requireOrgRoleMiddleware(RoleLevelAdmin)).Post("/", app.createProjectHandler)
+
+					r.Route("/{projectID}", func(r chi.Router) {
+						r.With(app.requireOrgRoleMiddleware(RoleLevelMember)).Get("/", app.getProjectHandler)
+						r.With(app.requireOrgRoleMiddleware(RoleLevelAdmin)).Delete("/", app.deleteProjectHandler)
+
+						r.Route("/keys", func(r chi.Router) {
+							r.With(app.requireOrgRoleMiddleware(RoleLevelMember)).Get("/", app.listKeysHandler)
+							r.With(app.requireOrgRoleMiddleware(RoleLevelAdmin)).Post("/", app.createKeyHandler)
+							r.With(app.requireOrgRoleMiddleware(RoleLevelAdmin)).Delete("/{keyID}", app.deleteKeyHandler)
+						})
 					})
 				})
 			})
-
-			r.Delete("/keys/{keyID}", app.deleteKeyHandler)
 		})
 	})
 

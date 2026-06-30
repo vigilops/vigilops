@@ -21,13 +21,13 @@ type ingestAgentStepPayload struct {
 	StepType      string          `json:"step_type"     validate:"required,oneof=think tool_call tool_result replan"`
 	Content       *string         `json:"content,omitempty"      validate:"omitempty,max=100000"`
 	ToolName      *string         `json:"tool_name,omitempty"    validate:"omitempty,max=200"`
-	ToolInput     json.RawMessage `json:"tool_input,omitempty"`
-	ToolOutput    json.RawMessage `json:"tool_output,omitempty"`
+	ToolInput     json.RawMessage `json:"tool_input,omitempty" swaggertype:"object"`
+	ToolOutput    json.RawMessage `json:"tool_output,omitempty" swaggertype:"object"`
 	ToolSuccess   *bool           `json:"tool_success,omitempty"`
 	ToolLatencyMs *int            `json:"tool_latency_ms,omitempty" validate:"omitempty,gte=0"`
 	Tokens        *int            `json:"tokens,omitempty"          validate:"omitempty,gte=0"`
 	CostUSD       *float64        `json:"cost_usd,omitempty"        validate:"omitempty,gte=0"`
-	Metadata      json.RawMessage `json:"metadata,omitempty"`
+	Metadata      json.RawMessage `json:"metadata,omitempty" swaggertype:"object"`
 }
 
 // IngestAgentStep godoc

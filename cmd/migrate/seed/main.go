@@ -27,8 +27,18 @@ func main() {
 
 	s := store.NewStorage(pool)
 
+	u := &store.User{Email: "seed@dev.local", Name: "seed"}
+	if err := s.Users.Create(ctx, u, nil); err != nil {
+		log.Fatalf("create user: %v", err)
+	}
+
+	org := &store.Organization{Name: "seed-org"}
+	if err := s.Organizations.CreateWithOwner(ctx, org, u.ID); err != nil {
+		log.Fatalf("create org: %v", err)
+	}
+
 	p := &store.Project{Name: projectName}
-	if err := s.Projects.Create(ctx, p); err != nil {
+	if err := s.Projects.Create(ctx, p, org.ID); err != nil {
 		log.Fatalf("create project: %v", err)
 	}
 

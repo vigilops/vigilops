@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"net/http"
 	"time"
 
@@ -19,25 +18,31 @@ type createKeyResponse struct {
 	ID        uuid.UUID `json:"id"`
 	ProjectID uuid.UUID `json:"project_id"`
 	Name      string    `json:"name"`
-	Key       string    `json:"key"` // plaintext, returned ONCE on creation
+	Key       string    `json:"key"`
 	CreatedAt time.Time `json:"created_at"`
 }
 
 // CreateKey godoc
 //
 //	@Summary		Creates an API key
-//	@Description	Generates a new API key for a project. Plaintext key is returned ONCE in the response; only the SHA-256 hash is stored.
+//	@Description	Generates a new API key for a project. Plaintext key is returned ONCE. Requires admin role.
 //	@Tags			admin/keys
 //	@Accept			json
 //	@Produce		json
+//	@Param			orgID		path		string				true	"Organization UUID"
 //	@Param			projectID	path		string				true	"Project UUID"
 //	@Param			payload		body		createKeyPayload	true	"Key payload"
 //	@Success		201			{object}	createKeyResponse
 //	@Failure		400			{object}	error
 //	@Failure		404			{object}	error
 //	@Failure		500			{object}	error
-//	@Router			/admin/projects/{projectID}/keys [post]
+//	@Router			/admin/orgs/{orgID}/projects/{projectID}/keys [post]
 func (app *application) createKeyHandler(w http.ResponseWriter, r *http.Request) {
+	orgID, err := parseUUIDParam(r, "orgID")
+	if err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
 	projectID, err := parseUUIDParam(r, "projectID")
 	if err != nil {
 		app.badRequestResponse(w, r, err)
@@ -45,22 +50,27 @@ func (app *application) createKeyHandler(w http.ResponseWriter, r *http.Request)
 	}
 
 	var payload createKeyPayload
-	if err := readJSON(w, r, &payload); err != nil {
+	if err = readJSON(w, r, &payload); err != nil {
 		app.badRequestResponse(w, r, err)
 		return
 	}
-	if err := Validate.Struct(payload); err != nil {
+	if err = Validate.Struct(payload); err != nil {
 		app.badRequestResponse(w, r, err)
 		return
 	}
 
-	if _, err := app.store.Projects.GetByID(r.Context(), projectID); err != nil {
-		switch {
-		case errors.Is(err, store.ErrNotFound):
+	proj, err := app.store.Projects.GetByID(r.Context(), projectID)
+	if err != nil {
+		switch err {
+		case store.ErrNotFound:
 			app.notFoundResponse(w, r, err)
 		default:
 			app.internalServerError(w, r, err)
 		}
+		return
+	}
+	if proj.OrganizationID != orgID {
+		app.notFoundResponse(w, r, store.ErrNotFound)
 		return
 	}
 
@@ -94,20 +104,40 @@ func (app *application) createKeyHandler(w http.ResponseWriter, r *http.Request)
 
 // ListKeys godoc
 //
-//	@Summary		Lists API keys
-//	@Description	Returns all API keys for a project ordered by created_at desc. Plaintext is never returned; only metadata and hash-derived ID.
-//	@Tags			admin/keys
-//	@Accept			json
-//	@Produce		json
-//	@Param			projectID	path		string	true	"Project UUID"
-//	@Success		200			{array}		store.APIKey
-//	@Failure		400			{object}	error
-//	@Failure		500			{object}	error
-//	@Router			/admin/projects/{projectID}/keys [get]
+//	@Summary	Lists API keys for a project
+//	@Tags		admin/keys
+//	@Produce	json
+//	@Param		orgID		path		string	true	"Organization UUID"
+//	@Param		projectID	path		string	true	"Project UUID"
+//	@Success	200			{array}		store.APIKey
+//	@Failure	400			{object}	error
+//	@Failure	404			{object}	error
+//	@Failure	500			{object}	error
+//	@Router		/admin/orgs/{orgID}/projects/{projectID}/keys [get]
 func (app *application) listKeysHandler(w http.ResponseWriter, r *http.Request) {
+	orgID, err := parseUUIDParam(r, "orgID")
+	if err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
 	projectID, err := parseUUIDParam(r, "projectID")
 	if err != nil {
 		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	proj, err := app.store.Projects.GetByID(r.Context(), projectID)
+	if err != nil {
+		switch err {
+		case store.ErrNotFound:
+			app.notFoundResponse(w, r, err)
+		default:
+			app.internalServerError(w, r, err)
+		}
+		return
+	}
+	if proj.OrganizationID != orgID {
+		app.notFoundResponse(w, r, store.ErrNotFound)
 		return
 	}
 
@@ -124,26 +154,51 @@ func (app *application) listKeysHandler(w http.ResponseWriter, r *http.Request) 
 // DeleteKey godoc
 //
 //	@Summary		Deletes an API key
-//	@Description	Revokes an API key by UUID. Subsequent requests using this key will return 401.
+//	@Description	Revokes an API key. Subsequent requests using this key will return 401. Requires admin role.
 //	@Tags			admin/keys
-//	@Accept			json
-//	@Produce		json
-//	@Param			keyID	path	string	true	"Key UUID"
+//	@Param			orgID		path	string	true	"Organization UUID"
+//	@Param			projectID	path	string	true	"Project UUID"
+//	@Param			keyID		path	string	true	"Key UUID"
 //	@Success		204
 //	@Failure		400	{object}	error
 //	@Failure		404	{object}	error
 //	@Failure		500	{object}	error
-//	@Router			/admin/keys/{keyID} [delete]
+//	@Router			/admin/orgs/{orgID}/projects/{projectID}/keys/{keyID} [delete]
 func (app *application) deleteKeyHandler(w http.ResponseWriter, r *http.Request) {
-	id, err := parseUUIDParam(r, "keyID")
+	orgID, err := parseUUIDParam(r, "orgID")
+	if err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+	projectID, err := parseUUIDParam(r, "projectID")
+	if err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+	keyID, err := parseUUIDParam(r, "keyID")
 	if err != nil {
 		app.badRequestResponse(w, r, err)
 		return
 	}
 
-	if err := app.store.APIKeys.Delete(r.Context(), id); err != nil {
-		switch {
-		case errors.Is(err, store.ErrNotFound):
+	proj, err := app.store.Projects.GetByID(r.Context(), projectID)
+	if err != nil {
+		switch err {
+		case store.ErrNotFound:
+			app.notFoundResponse(w, r, err)
+		default:
+			app.internalServerError(w, r, err)
+		}
+		return
+	}
+	if proj.OrganizationID != orgID {
+		app.notFoundResponse(w, r, store.ErrNotFound)
+		return
+	}
+
+	if err := app.store.APIKeys.Delete(r.Context(), keyID, projectID); err != nil {
+		switch err {
+		case store.ErrNotFound:
 			app.notFoundResponse(w, r, err)
 		default:
 			app.internalServerError(w, r, err)

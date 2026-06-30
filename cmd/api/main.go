@@ -14,6 +14,7 @@ import (
 	"github.com/keelwave/keelwave/internal/batch"
 	"github.com/keelwave/keelwave/internal/db"
 	"github.com/keelwave/keelwave/internal/env"
+	"github.com/keelwave/keelwave/internal/mailer"
 	"github.com/keelwave/keelwave/internal/store"
 )
 
@@ -48,11 +49,36 @@ func main() {
 			maxRows:       env.GetInt("BATCH_MAX_ROWS", 500),
 			queueDepth:    env.GetInt("BATCH_QUEUE_DEPTH", 10_000),
 		},
+		auth: authConfig{
+			sessionTTL:   parseDurationOr("SESSION_TTL", 7*24*time.Hour),
+			cookieName:   env.GetString("SESSION_COOKIE_NAME", "keelwave_session"),
+			cookieSecure: env.GetString("ENV", "development") == "production",
+			publicURL:    env.GetString("PUBLIC_URL", "http://localhost:8080"),
+			dashboardURL: env.GetString("DASHBOARD_URL", "http://localhost:3000"),
+			google: oauthProvider{
+				clientID:     env.GetString("GOOGLE_CLIENT_ID", ""),
+				clientSecret: env.GetString("GOOGLE_CLIENT_SECRET", ""),
+			},
+			github: oauthProvider{
+				clientID:     env.GetString("GITHUB_CLIENT_ID", ""),
+				clientSecret: env.GetString("GITHUB_CLIENT_SECRET", ""),
+			},
+		},
+		mail: mailConfig{
+			apiKey:    env.GetString("RESEND_API_KEY", ""),
+			fromEmail: env.GetString("MAIL_FROM", "example@example.com"),
+		},
 		shutdownTimeout: parseDurationOr("SHUTDOWN_TIMEOUT", 10*time.Second),
 	}
 
 	logger := zap.Must(zap.NewProduction()).Sugar()
 	defer logger.Sync()
+
+	for _, origin := range cfg.corsOrigins {
+		if origin == "*" {
+			logger.Fatal("CORS_ALLOWED_ORIGINS must not contain \"*\" when AllowCredentials is true; specify explicit origins")
+		}
+	}
 
 	rootCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -76,6 +102,7 @@ func main() {
 		pool:     pool,
 		store:    store.NewStorage(pool),
 		batchers: batchers,
+		mailer:   mailer.NewResendClient(cfg.mail.apiKey, cfg.mail.fromEmail),
 		logger:   logger,
 	}
 

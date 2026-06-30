@@ -62,8 +62,18 @@ func main() {
 	s := store.NewStorage(pool)
 	rng := rand.New(rand.NewSource(42)) // fixed seed → reproducible dataset
 
+	u := &store.User{Email: "demo@dev.local", Name: "demo"}
+	if err := s.Users.Create(ctx, u, nil); err != nil {
+		log.Fatalf("create user: %v", err)
+	}
+
+	org := &store.Organization{Name: "demo-org"}
+	if err := s.Organizations.CreateWithOwner(ctx, org, u.ID); err != nil {
+		log.Fatalf("create org: %v", err)
+	}
+
 	p := &store.Project{Name: projectName}
-	if err := s.Projects.Create(ctx, p); err != nil {
+	if err := s.Projects.Create(ctx, p, org.ID); err != nil {
 		log.Fatalf("create project: %v", err)
 	}
 	plaintext, hash, err := auth.Generate()

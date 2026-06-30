@@ -14,7 +14,7 @@ type ingestAgentRunStartPayload struct {
 	Timestamp *time.Time      `json:"timestamp,omitempty"`
 	AgentName string          `json:"agent_name"      validate:"required,min=1,max=200"`
 	Input     *string         `json:"input,omitempty" validate:"omitempty,max=10000"`
-	Metadata  json.RawMessage `json:"metadata,omitempty"`
+	Metadata  json.RawMessage `json:"metadata,omitempty" swaggertype:"object"`
 }
 
 // IngestAgentRunStart godoc

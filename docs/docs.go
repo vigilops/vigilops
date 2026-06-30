@@ -15,9 +15,8 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
-        "/admin/keys/{keyID}": {
-            "delete": {
-                "description": "Revokes an API key by UUID. Subsequent requests using this key will return 401.",
+        "/admin/orgs": {
+            "post": {
                 "consumes": [
                     "application/json"
                 ],
@@ -25,14 +24,50 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "admin/keys"
+                    "admin/orgs"
                 ],
-                "summary": "Deletes an API key",
+                "summary": "Create an organization",
+                "parameters": [
+                    {
+                        "description": "name (string, required)",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/store.Organization"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {}
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {}
+                    }
+                }
+            }
+        },
+        "/admin/orgs/{orgID}": {
+            "delete": {
+                "description": "Permanently deletes the org and all its projects, keys, and ingest data.",
+                "tags": [
+                    "admin/orgs"
+                ],
+                "summary": "Delete an organization",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Key UUID",
-                        "name": "keyID",
+                        "description": "Organization UUID",
+                        "name": "orgID",
                         "in": "path",
                         "required": true
                     }
@@ -45,20 +80,17 @@ const docTemplate = `{
                         "description": "Bad Request",
                         "schema": {}
                     },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {}
+                    },
                     "404": {
                         "description": "Not Found",
                         "schema": {}
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {}
                     }
                 }
-            }
-        },
-        "/admin/projects": {
-            "get": {
-                "description": "Returns all projects ordered by created_at desc.",
+            },
+            "patch": {
                 "consumes": [
                     "application/json"
                 ],
@@ -66,9 +98,307 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
+                    "admin/orgs"
+                ],
+                "summary": "Rename an organization",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Organization UUID",
+                        "name": "orgID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Update payload",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/main.updateOrgPayload"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/store.Organization"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {}
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {}
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {}
+                    }
+                }
+            }
+        },
+        "/admin/orgs/{orgID}/invites": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin/invites"
+                ],
+                "summary": "List pending invites for an organization",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Organization UUID",
+                        "name": "orgID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/store.OrganizationInvite"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin/invites"
+                ],
+                "summary": "Invite a user to an organization",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Organization UUID",
+                        "name": "orgID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Invite payload",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/main.createInvitePayload"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/store.OrganizationInvite"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {}
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {}
+                    }
+                }
+            }
+        },
+        "/admin/orgs/{orgID}/invites/{inviteID}": {
+            "delete": {
+                "tags": [
+                    "admin/invites"
+                ],
+                "summary": "Cancel an invite",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Organization UUID",
+                        "name": "orgID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Invite UUID",
+                        "name": "inviteID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    }
+                }
+            }
+        },
+        "/admin/orgs/{orgID}/members": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin/members"
+                ],
+                "summary": "List org members",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Organization UUID",
+                        "name": "orgID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/store.MemberWithUser"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {}
+                    }
+                }
+            }
+        },
+        "/admin/orgs/{orgID}/members/{userID}": {
+            "delete": {
+                "description": "Admin+. Cannot remove an owner or yourself.",
+                "tags": [
+                    "admin/members"
+                ],
+                "summary": "Remove a member from the org",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Organization UUID",
+                        "name": "orgID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Member user UUID",
+                        "name": "userID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {}
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {}
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {}
+                    }
+                }
+            }
+        },
+        "/admin/orgs/{orgID}/members/{userID}/role": {
+            "patch": {
+                "description": "Owner only. Cannot change an owner's role or promote to owner.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin/members"
+                ],
+                "summary": "Update a member's role",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Organization UUID",
+                        "name": "orgID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Member user UUID",
+                        "name": "userID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Role payload",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/main.updateRolePayload"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {}
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {}
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {}
+                    }
+                }
+            }
+        },
+        "/admin/orgs/{orgID}/projects": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
                     "admin/projects"
                 ],
-                "summary": "Lists projects",
+                "summary": "Lists projects in an org",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Organization UUID",
+                        "name": "orgID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -86,7 +416,7 @@ const docTemplate = `{
                 }
             },
             "post": {
-                "description": "Creates a tenant project; all ingest rows are scoped by project_id.",
+                "description": "Creates a tenant project scoped to the org. Requires admin role.",
                 "consumes": [
                     "application/json"
                 ],
@@ -98,6 +428,13 @@ const docTemplate = `{
                 ],
                 "summary": "Creates a project",
                 "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Organization UUID",
+                        "name": "orgID",
+                        "in": "path",
+                        "required": true
+                    },
                     {
                         "description": "Project payload",
                         "name": "payload",
@@ -119,6 +456,10 @@ const docTemplate = `{
                         "description": "Bad Request",
                         "schema": {}
                     },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {}
+                    },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {}
@@ -126,12 +467,8 @@ const docTemplate = `{
                 }
             }
         },
-        "/admin/projects/{projectID}": {
+        "/admin/orgs/{orgID}/projects/{projectID}": {
             "get": {
-                "description": "Fetches a project by UUID.",
-                "consumes": [
-                    "application/json"
-                ],
                 "produces": [
                     "application/json"
                 ],
@@ -140,6 +477,13 @@ const docTemplate = `{
                 ],
                 "summary": "Fetches a project",
                 "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Organization UUID",
+                        "name": "orgID",
+                        "in": "path",
+                        "required": true
+                    },
                     {
                         "type": "string",
                         "description": "Project UUID",
@@ -171,17 +515,18 @@ const docTemplate = `{
             },
             "delete": {
                 "description": "Deletes a project and cascades to its api_keys and ingest rows.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
                 "tags": [
                     "admin/projects"
                 ],
                 "summary": "Deletes a project",
                 "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Organization UUID",
+                        "name": "orgID",
+                        "in": "path",
+                        "required": true
+                    },
                     {
                         "type": "string",
                         "description": "Project UUID",
@@ -209,20 +554,23 @@ const docTemplate = `{
                 }
             }
         },
-        "/admin/projects/{projectID}/keys": {
+        "/admin/orgs/{orgID}/projects/{projectID}/keys": {
             "get": {
-                "description": "Returns all API keys for a project ordered by created_at desc. Plaintext is never returned; only metadata and hash-derived ID.",
-                "consumes": [
-                    "application/json"
-                ],
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "admin/keys"
                 ],
-                "summary": "Lists API keys",
+                "summary": "Lists API keys for a project",
                 "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Organization UUID",
+                        "name": "orgID",
+                        "in": "path",
+                        "required": true
+                    },
                     {
                         "type": "string",
                         "description": "Project UUID",
@@ -245,6 +593,10 @@ const docTemplate = `{
                         "description": "Bad Request",
                         "schema": {}
                     },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {}
+                    },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {}
@@ -252,7 +604,7 @@ const docTemplate = `{
                 }
             },
             "post": {
-                "description": "Generates a new API key for a project. Plaintext key is returned ONCE in the response; only the SHA-256 hash is stored.",
+                "description": "Generates a new API key for a project. Plaintext key is returned ONCE. Requires admin role.",
                 "consumes": [
                     "application/json"
                 ],
@@ -264,6 +616,13 @@ const docTemplate = `{
                 ],
                 "summary": "Creates an API key",
                 "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Organization UUID",
+                        "name": "orgID",
+                        "in": "path",
+                        "required": true
+                    },
                     {
                         "type": "string",
                         "description": "Project UUID",
@@ -287,6 +646,55 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/main.createKeyResponse"
                         }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {}
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {}
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {}
+                    }
+                }
+            }
+        },
+        "/admin/orgs/{orgID}/projects/{projectID}/keys/{keyID}": {
+            "delete": {
+                "description": "Revokes an API key. Subsequent requests using this key will return 401. Requires admin role.",
+                "tags": [
+                    "admin/keys"
+                ],
+                "summary": "Deletes an API key",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Organization UUID",
+                        "name": "orgID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Project UUID",
+                        "name": "projectID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Key UUID",
+                        "name": "keyID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
                     },
                     "400": {
                         "description": "Bad Request",
@@ -829,6 +1237,296 @@ const docTemplate = `{
                 }
             }
         },
+        "/auth/invites/{token}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Get invite info by token (public — for the accept page)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Invite token",
+                        "name": "token",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/store.OrganizationInvite"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/invites/{token}/accept": {
+            "put": {
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Accept an invite (requires session)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Invite token",
+                        "name": "token",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    }
+                }
+            }
+        },
+        "/auth/login": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Log in with email + password",
+                "parameters": [
+                    {
+                        "description": "Credentials",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/main.loginPayload"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/main.authUserResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {}
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {}
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {}
+                    }
+                }
+            }
+        },
+        "/auth/logout": {
+            "post": {
+                "tags": [
+                    "auth"
+                ],
+                "summary": "End the current session",
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {}
+                    }
+                }
+            }
+        },
+        "/auth/me": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Get the current user and their organizations",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/main.authUserResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {}
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {}
+                    }
+                }
+            }
+        },
+        "/auth/oauth/{provider}/callback": {
+            "get": {
+                "tags": [
+                    "auth"
+                ],
+                "summary": "OAuth provider callback — issues session and redirects to dashboard",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "OAuth provider (google, github)",
+                        "name": "provider",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Authorization code",
+                        "name": "code",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "CSRF state",
+                        "name": "state",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "307": {
+                        "description": "Temporary Redirect"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {}
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {}
+                    }
+                }
+            }
+        },
+        "/auth/oauth/{provider}/start": {
+            "get": {
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Initiate OAuth login flow",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "OAuth provider (google, github)",
+                        "name": "provider",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Post-login redirect path",
+                        "name": "redirect",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "307": {
+                        "description": "Temporary Redirect"
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {}
+                    }
+                }
+            }
+        },
+        "/auth/register": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Register a new user",
+                "parameters": [
+                    {
+                        "description": "Registration payload",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/main.registerPayload"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/main.authUserResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {}
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {}
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {}
+                    }
+                }
+            }
+        },
+        "/auth/verify-email/{token}": {
+            "get": {
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Verify email via token from the verification link",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Verification token",
+                        "name": "token",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {}
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {}
+                    }
+                }
+            }
+        },
         "/health": {
             "get": {
                 "description": "Returns service status, version, and environment.",
@@ -1171,6 +1869,38 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "main.authUserResponse": {
+            "type": "object",
+            "properties": {
+                "organizations": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/store.Organization"
+                    }
+                },
+                "user": {
+                    "$ref": "#/definitions/store.User"
+                }
+            }
+        },
+        "main.createInvitePayload": {
+            "type": "object",
+            "required": [
+                "email"
+            ],
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "role": {
+                    "type": "string",
+                    "enum": [
+                        "admin",
+                        "member"
+                    ]
+                }
+            }
+        },
         "main.createKeyPayload": {
             "type": "object",
             "required": [
@@ -1194,7 +1924,6 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "key": {
-                    "description": "plaintext, returned ONCE on creation",
                     "type": "string"
                 },
                 "name": {
@@ -1219,7 +1948,67 @@ const docTemplate = `{
             }
         },
         "main.ingestAIPayload": {
-            "type": "object"
+            "type": "object",
+            "required": [
+                "model",
+                "status"
+            ],
+            "properties": {
+                "agent_run_id": {
+                    "type": "string"
+                },
+                "cost_usd": {
+                    "type": "number",
+                    "minimum": 0
+                },
+                "error_message": {
+                    "type": "string",
+                    "maxLength": 2000
+                },
+                "input_tokens": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "latency_ms": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "metadata": {
+                    "type": "object"
+                },
+                "model": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "minLength": 1
+                },
+                "output_tokens": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "provider": {
+                    "type": "string",
+                    "maxLength": 50
+                },
+                "request_id": {
+                    "type": "string",
+                    "maxLength": 200
+                },
+                "status": {
+                    "type": "string",
+                    "enum": [
+                        "success",
+                        "error",
+                        "timeout"
+                    ]
+                },
+                "timestamp": {
+                    "type": "string"
+                },
+                "total_tokens": {
+                    "type": "integer",
+                    "minimum": 0
+                }
+            }
         },
         "main.ingestAgentRunFinishPayload": {
             "type": "object",
@@ -1279,16 +2068,184 @@ const docTemplate = `{
             }
         },
         "main.ingestAgentRunStartPayload": {
-            "type": "object"
+            "type": "object",
+            "required": [
+                "agent_name"
+            ],
+            "properties": {
+                "agent_name": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "minLength": 1
+                },
+                "input": {
+                    "type": "string",
+                    "maxLength": 10000
+                },
+                "metadata": {
+                    "type": "object"
+                },
+                "timestamp": {
+                    "type": "string"
+                }
+            }
         },
         "main.ingestAgentStepPayload": {
-            "type": "object"
+            "type": "object",
+            "required": [
+                "agent_run_id",
+                "step_type"
+            ],
+            "properties": {
+                "agent_run_id": {
+                    "type": "string"
+                },
+                "content": {
+                    "type": "string",
+                    "maxLength": 100000
+                },
+                "cost_usd": {
+                    "type": "number",
+                    "minimum": 0
+                },
+                "metadata": {
+                    "type": "object"
+                },
+                "step_index": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "step_type": {
+                    "type": "string",
+                    "enum": [
+                        "think",
+                        "tool_call",
+                        "tool_result",
+                        "replan"
+                    ]
+                },
+                "timestamp": {
+                    "type": "string"
+                },
+                "tokens": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "tool_input": {
+                    "type": "object"
+                },
+                "tool_latency_ms": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "tool_name": {
+                    "type": "string",
+                    "maxLength": 200
+                },
+                "tool_output": {
+                    "type": "object"
+                },
+                "tool_success": {
+                    "type": "boolean"
+                }
+            }
         },
         "main.ingestEventPayload": {
-            "type": "object"
+            "type": "object",
+            "required": [
+                "duration_ms",
+                "method",
+                "path",
+                "service",
+                "status_code"
+            ],
+            "properties": {
+                "duration_ms": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "error": {
+                    "type": "string",
+                    "maxLength": 2000
+                },
+                "ip": {
+                    "type": "string"
+                },
+                "metadata": {
+                    "type": "object"
+                },
+                "method": {
+                    "type": "string",
+                    "enum": [
+                        "GET",
+                        "POST",
+                        "PUT",
+                        "PATCH",
+                        "DELETE",
+                        "OPTIONS",
+                        "HEAD"
+                    ]
+                },
+                "path": {
+                    "type": "string",
+                    "maxLength": 500,
+                    "minLength": 1
+                },
+                "request_size_bytes": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "response_size_bytes": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "service": {
+                    "type": "string",
+                    "maxLength": 100,
+                    "minLength": 1
+                },
+                "status_code": {
+                    "type": "integer",
+                    "maximum": 599,
+                    "minimum": 100
+                },
+                "timestamp": {
+                    "type": "string"
+                },
+                "user_agent": {
+                    "type": "string",
+                    "maxLength": 500
+                }
+            }
         },
         "main.ingestMetricPayload": {
-            "type": "object"
+            "type": "object",
+            "required": [
+                "host",
+                "metric_name",
+                "value"
+            ],
+            "properties": {
+                "host": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "minLength": 1
+                },
+                "labels": {
+                    "type": "object"
+                },
+                "metric_name": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "minLength": 1
+                },
+                "timestamp": {
+                    "type": "string"
+                },
+                "value": {
+                    "type": "number"
+                }
+            }
         },
         "main.ingestResponse": {
             "type": "object",
@@ -1298,6 +2255,71 @@ const docTemplate = `{
                 },
                 "timestamp": {
                     "type": "string"
+                }
+            }
+        },
+        "main.loginPayload": {
+            "type": "object",
+            "required": [
+                "email",
+                "password"
+            ],
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "password": {
+                    "type": "string"
+                }
+            }
+        },
+        "main.registerPayload": {
+            "type": "object",
+            "required": [
+                "email",
+                "password"
+            ],
+            "properties": {
+                "email": {
+                    "type": "string",
+                    "maxLength": 255
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 100
+                },
+                "password": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "minLength": 8
+                }
+            }
+        },
+        "main.updateOrgPayload": {
+            "type": "object",
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "maxLength": 100,
+                    "minLength": 1
+                }
+            }
+        },
+        "main.updateRolePayload": {
+            "type": "object",
+            "required": [
+                "role"
+            ],
+            "properties": {
+                "role": {
+                    "type": "string",
+                    "enum": [
+                        "admin",
+                        "member"
+                    ]
                 }
             }
         },
@@ -1465,6 +2487,69 @@ const docTemplate = `{
                 }
             }
         },
+        "store.MemberWithUser": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "email": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "organization_id": {
+                    "type": "string"
+                },
+                "role": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "store.Organization": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "store.OrganizationInvite": {
+            "type": "object",
+            "properties": {
+                "accepted_at": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "email": {
+                    "type": "string"
+                },
+                "expires_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "organization_id": {
+                    "type": "string"
+                },
+                "role": {
+                    "type": "string"
+                }
+            }
+        },
         "store.Project": {
             "type": "object",
             "properties": {
@@ -1475,6 +2560,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "name": {
+                    "type": "string"
+                },
+                "organization_id": {
                     "type": "string"
                 }
             }
@@ -1631,6 +2719,29 @@ const docTemplate = `{
                     "type": "number"
                 },
                 "tool_name": {
+                    "type": "string"
+                }
+            }
+        },
+        "store.User": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "email": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "is_verified": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "verified_at": {
                     "type": "string"
                 }
             }
