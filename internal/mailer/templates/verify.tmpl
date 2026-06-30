@@ -1,0 +1,18 @@
+{{define "subject"}}Verify your keelwave email{{end}}
+
+{{define "body"}}
+<!doctype html>
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width" />
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+  </head>
+  <body>
+    <p>Hi,</p>
+    <p>Click the link below to verify your email address and complete your keelwave registration.</p>
+    <p><a href="{{.VerifyURL}}">Verify email</a></p>
+    <p>This link expires in 24 hours. If you didn't create an account, you can safely ignore this email.</p>
+    <p>— The keelwave team<br><a href="https://keelwave.com">keelwave.com</a></p>
+  </body>
+</html>
+{{end}}
